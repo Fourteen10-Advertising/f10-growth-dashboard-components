@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLIENT_NAME | Growth Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fourteen10-advertising/f10-growth-dashboard-components@v0.1.0/f10-growth-shared.css" />
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/fourteen10-advertising/f10-growth-dashboard-components@v0.1.0/f10-growth-core.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/fourteen10-advertising/f10-growth-dashboard-components@v0.1.0/f10-growth-shell.js"></script>
+<script>
+/* ───────────────────────────────────────────────────────────────────────────
+   CLIENT CONFIG + DASHBOARD MANIFEST
+   Growth dashboards are bespoke: define your tabs, each with a `body` (the HTML
+   it renders into) and a `load(ctx)` (its BigQuery SQL + render). The shared
+   library supplies all the chrome, formatters, and builders. See the components
+   README for the full manifest contract.
+   ─────────────────────────────────────────────────────────────────────────── */
+const BQ_FUNCTION = '/.netlify/functions/bq';  /* leave as-is */
+const PROJECT     = 'mcc-poc-477801';          /* GCP project */
+const DATASET     = 'your_dataset';            /* e.g. 'acme_clean' */
+
+const DASHBOARD = {
+  clientName: 'CLIENT_NAME',
+  reportName: 'Growth Dashboard',
+  controls: { dateRange: true, defaultDays: 13 },
+
+  /* Optional dropdown filters. Each is shown only on tabs that list its id.
+     options: array of strings / { value, label }, or an async () => [...]. */
+  filters: {
+    // group: { label: 'Group', options: ['Brand', 'Generic', 'Competitor'] },
+  },
+
+  tabs: [
+    /* ── Example: a KPI + table tab ── */
+    {
+      id: 'overview', group: 'Google Ads', navLabel: 'Overview',
+      title: 'Platform Growth — Year over Year',
+      sub: 'Spend and conversions vs the same period last year.',
+      // filters: ['group'],
+      body: `
+        <div class="sub-label">Headline</div>
+        <div class="kpi-grid" id="ov-kpis"></div>
+        <div class="table-card">
+          <div class="table-card-header">Campaign Breakdown</div>
+          <div class="table-wrap" id="ov-table"></div>
+        </div>`,
+      load: async (ctx) => {
+        const d = ctx.dates;
+        const rows = await runQuery(`
+          SELECT
+            campaign_name,
+            SUM(CASE WHEN date_start BETWEEN '${d.s}'  AND '${d.e}'  THEN ad_spend ELSE 0 END) AS c_spend,
+            SUM(CASE WHEN date_start BETWEEN '${d.pyS}' AND '${d.pyE}' THEN ad_spend ELSE 0 END) AS p_spend
+          FROM \`${PROJECT}.${DATASET}.google_daily_campaign_performance\`
+          WHERE date_start BETWEEN '${d.pyS}' AND '${d.e}'
+          GROUP BY campaign_name ORDER BY c_spend DESC`);
+        const cTot = rows.reduce((a, r) => a + n(r.c_spend), 0);
+        const pTot = rows.reduce((a, r) => a + n(r.p_spend), 0);
+        document.getElementById('ov-kpis').innerHTML = [
+          kpiCard('Spend', fmtAUDFull(cTot), `Prior yr: ${fmtAUDFull(pTot)}`, cTot, pTot),
+          kpiCard('Campaigns', fmt(rows.length)),
+        ].join('');
+        buildTable('ov-table',
+          [{ label: 'Campaign' }, { label: 'Spend', num: true }, { label: 'Prior Yr', num: true }],
+          rows.map(r => [r.campaign_name, fmtAUDFull(r.c_spend), fmtAUDFull(r.p_spend)]));
+      },
+    },
+
+    /* ── Example: an over-time chart tab (with granularity selector) ── */
+    {
+      id: 'trend', group: 'Google Ads', navLabel: 'Over Time',
+      title: 'Performance Over Time', sub: 'Spend trend for the selected range.',
+      granularity: true,
+      body: `<div class="chart-card"><div class="chart-card-title">Spend</div>
+               <div class="chart-wrap"><canvas id="trend-spend"></canvas></div></div>`,
+      load: async (ctx) => {
+        const d = ctx.dates, bucket = gGroup('date_start', ctx.granularity);
+        const rows = await runQuery(`
+          SELECT ${bucket} AS bucket, SUM(ad_spend) AS spend
+          FROM \`${PROJECT}.${DATASET}.google_daily_campaign_performance\`
+          WHERE date_start BETWEEN '${d.s}' AND '${d.e}'
+          GROUP BY bucket ORDER BY bucket`);
+        makeChart('trend-spend', {
+          type: 'line',
+          data: {
+            labels: rows.map(r => r.bucket),
+            datasets: [{ label: 'Spend', data: rows.map(r => n(r.spend)),
+              borderColor: getCSS('--young-blood'), backgroundColor: 'rgba(75,0,15,0.08)', tension: 0.25, fill: true }],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+        });
+      },
+    },
+  ],
+
+  initialTab: 'overview',
+};
+
+renderGrowthDashboard(DASHBOARD);
+</script>
+</body>
+</html>
