@@ -13,7 +13,7 @@
  *   renderGrowthDashboard(config);
  */
 
-const F10G = { cfg: null, tab: null, granularity: 'week', _filterDefs: {} };
+const F10G = { cfg: null, tab: null, granularity: 'week', _filterDefs: {}, _dr: null };
 
 function renderGrowthDashboard(config){
   F10G.cfg = config;
@@ -44,8 +44,21 @@ function renderGrowthDashboard(config){
   /* ── Controls: date range, per-filter selects, granularity ── */
   const dateHTML = controls.dateRange === false ? '' : `
     <div class="ctrl" id="ctrl-dates"><label>Date range</label>
-      <div class="daterange">
-        <input type="date" id="f10-start" /><input type="date" id="f10-end" />
+      <div class="daterange-dd" id="f10-daterange">
+        <input type="hidden" id="f10-start" /><input type="hidden" id="f10-end" />
+        <button type="button" class="daterange-trigger" id="f10-dr-trigger" aria-haspopup="true" aria-expanded="false">
+          <span id="f10-dr-label">Select dates</span><span class="daterange-caret">▾</span>
+        </button>
+        <div class="daterange-pop" id="f10-dr-pop" hidden>
+          <div class="dr-presets" id="f10-dr-presets"></div>
+          <div class="dr-cal">
+            <div class="dr-cal-nav">
+              <button type="button" class="dr-nav" data-nav="-1" aria-label="Previous month">‹</button>
+              <button type="button" class="dr-nav" data-nav="1" aria-label="Next month">›</button>
+            </div>
+            <div class="dr-months" id="f10-dr-months"></div>
+          </div>
+        </div>
       </div>
     </div>`;
   const filterHTML = Object.entries(F10G._filterDefs).map(([id, def]) =>
@@ -115,14 +128,12 @@ function wireShell(config){
   });
   /* Refresh */
   document.getElementById('refresh-btn').addEventListener('click', loadActive);
-  /* Date range */
+  /* Date range — single dropdown holding a dual-month range calendar and quick
+     presets. The two hidden inputs (#f10-start / #f10-end) stay the source of
+     truth so getCtx and consumer loaders are unchanged. */
   const controls = config.controls || {};
   if(controls.dateRange !== false){
-    const days = controls.defaultDays != null ? controls.defaultDays : 13;
-    const start = document.getElementById('f10-start'), end = document.getElementById('f10-end');
-    end.value = today(); start.value = daysAgo(days);
-    start.addEventListener('change', loadActive);
-    end.addEventListener('change', loadActive);
+    initDateRange(controls);
   }
   /* Granularity */
   document.querySelectorAll('#f10-gran button').forEach(b => {
@@ -154,6 +165,146 @@ function wireShell(config){
 }
 
 function currentTab(){ return (F10G.cfg.tabs || []).find(t => t.id === F10G.tab); }
+
+/* ── Date-range calendar ──
+   A self-contained, dependency-free dual-month range picker. Click a start day
+   then an end day; the range highlights between them. Quick presets sit
+   alongside. Selections are written to the hidden #f10-start / #f10-end inputs,
+   which remain the source of truth read by getCtx. */
+const DR_DOW = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+const DR_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+const DR_PRESETS = [
+  { label: 'Last 7 days',  range: () => [daysAgo(6),  today()] },
+  { label: 'Last 30 days', range: () => [daysAgo(29), today()] },
+  { label: 'Last 90 days', range: () => [daysAgo(89), today()] },
+  { label: 'This month',   range: () => [startOfMonth(today()), today()] },
+  { label: 'Last month',   range: () => { const lm = addDays(startOfMonth(today()), -1); return [startOfMonth(lm), endOfMonth(lm)]; } },
+];
+function drPad2(n){ return String(n).padStart(2, '0'); }
+
+function initDateRange(controls){
+  const days = controls.defaultDays != null ? controls.defaultDays : 13;
+  const s = daysAgo(days), e = today();
+  const ed = new Date(e + 'T00:00:00');
+  F10G._dr = { start: s, end: e, pending: null, hover: null, viewY: ed.getFullYear(), viewM: ed.getMonth() };
+  document.getElementById('f10-start').value = s;
+  document.getElementById('f10-end').value = e;
+
+  const trigger = document.getElementById('f10-dr-trigger');
+  const pop = document.getElementById('f10-dr-pop');
+  const months = document.getElementById('f10-dr-months');
+  trigger.addEventListener('click', (ev) => { ev.stopPropagation(); pop.hidden ? drOpen() : drClose(); });
+  document.addEventListener('click', (ev) => { if(!pop.hidden && !ev.target.closest('#f10-daterange')) drClose(); });
+  document.addEventListener('keydown', (ev) => { if(ev.key === 'Escape') drClose(); });
+  pop.querySelectorAll('.dr-nav').forEach(b => b.addEventListener('click', () => drShiftMonth(parseInt(b.dataset.nav, 10))));
+  months.addEventListener('click', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d) drPickDay(c.dataset.d); });
+  months.addEventListener('mouseover', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d && F10G._dr.pending){ F10G._dr.hover = c.dataset.d; drRenderMonths(); } });
+
+  drRenderPresets();
+  drRenderTrigger();
+}
+
+function drOpen(){
+  const pop = document.getElementById('f10-dr-pop');
+  pop.hidden = false;
+  document.getElementById('f10-dr-trigger').setAttribute('aria-expanded', 'true');
+  drRenderMonths();
+}
+function drClose(){
+  const pop = document.getElementById('f10-dr-pop');
+  if(!pop) return;
+  pop.hidden = true;
+  document.getElementById('f10-dr-trigger').setAttribute('aria-expanded', 'false');
+}
+
+function drShiftMonth(delta){
+  const dr = F10G._dr;
+  let m = dr.viewM + delta, y = dr.viewY;
+  while(m < 0){ m += 12; y--; }
+  while(m > 11){ m -= 12; y++; }
+  dr.viewY = y; dr.viewM = m;
+  drRenderMonths();
+}
+
+function drPickDay(d){
+  const dr = F10G._dr;
+  if(!dr.pending){ dr.pending = d; dr.start = d; dr.end = null; dr.hover = d; drRenderMonths(); return; }
+  const s = d < dr.pending ? d : dr.pending;
+  const e = d < dr.pending ? dr.pending : d;
+  drCommit(s, e);
+}
+
+function drCommit(s, e){
+  const dr = F10G._dr;
+  dr.start = s; dr.end = e; dr.pending = null; dr.hover = null;
+  document.getElementById('f10-start').value = s;
+  document.getElementById('f10-end').value = e;
+  drRenderTrigger();
+  drClose();
+  loadActive();
+}
+
+function drRenderTrigger(){
+  const label = document.getElementById('f10-dr-label');
+  const dr = F10G._dr;
+  if(label) label.textContent = (dr.start && dr.end) ? fmtRange(dr.start, dr.end) : 'Select dates';
+}
+
+function drRenderPresets(){
+  const host = document.getElementById('f10-dr-presets');
+  if(!host) return;
+  host.innerHTML = '';
+  DR_PRESETS.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'dr-preset'; b.textContent = p.label;
+    b.addEventListener('click', () => {
+      const [s, e] = p.range();
+      const ed = new Date(e + 'T00:00:00');
+      F10G._dr.viewY = ed.getFullYear(); F10G._dr.viewM = ed.getMonth();
+      drCommit(s, e);
+    });
+    host.appendChild(b);
+  });
+}
+
+function drRenderMonths(){
+  const host = document.getElementById('f10-dr-months');
+  if(!host) return;
+  const dr = F10G._dr;
+  let m2 = dr.viewM + 1, y2 = dr.viewY;
+  if(m2 > 11){ m2 = 0; y2++; }
+  host.innerHTML = drMonthHTML(dr.viewY, dr.viewM) + drMonthHTML(y2, m2);
+}
+
+function drDayClass(d){
+  const dr = F10G._dr;
+  let s, e;
+  if(dr.pending){
+    const h = dr.hover || dr.pending;
+    s = dr.pending < h ? dr.pending : h;
+    e = dr.pending < h ? h : dr.pending;
+  } else { s = dr.start; e = dr.end; }
+  let cls = 'dr-day';
+  if(s && d === s) cls += ' is-start';
+  if(e && d === e) cls += ' is-end';
+  if(s && e && d > s && d < e) cls += ' in-range';
+  if(d === today()) cls += ' is-today';
+  return cls;
+}
+
+function drMonthHTML(year, month){
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+  const dim = new Date(year, month + 1, 0).getDate();
+  let cells = '';
+  for(let i = 0; i < lead; i++) cells += '<span class="dr-day empty"></span>';
+  for(let d = 1; d <= dim; d++){
+    const ymd = year + '-' + drPad2(month + 1) + '-' + drPad2(d);
+    cells += `<button type="button" class="${drDayClass(ymd)}" data-d="${ymd}">${d}</button>`;
+  }
+  const dow = DR_DOW.map(x => `<span class="dr-dow">${x}</span>`).join('');
+  return `<div class="dr-month"><div class="dr-month-title">${DR_MONTHS[month]} ${year}</div><div class="dr-grid">${dow}${cells}</div></div>`;
+}
 
 function switchTab(tabId){
   if(!tabId) return;
