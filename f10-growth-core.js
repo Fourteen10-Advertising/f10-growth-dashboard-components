@@ -78,11 +78,10 @@ function computePeriods(s, e){
   return { s, e, days, pyS, pyE, ppS, ppE };
 }
 
-/* Format a YYYY-MM-DD range as "6 Jun – 14 Jun" for the date-range trigger label. */
-function fmtRange(s, e){
-  const fmt = (d) => { const dt = new Date(d + 'T00:00:00'); return dt.getDate() + ' ' + dt.toLocaleString('en-AU', { month: 'short' }); };
-  return fmt(s) + ' – ' + fmt(e);
-}
+/* Format a single YYYY-MM-DD as "6 Jun", and a range as "6 Jun – 14 Jun".
+   Used by the date-range trigger label, selection summary and presets. */
+function fmtDay(d){ const dt = new Date(d + 'T00:00:00'); return dt.getDate() + ' ' + dt.toLocaleString('en-AU', { month: 'short' }); }
+function fmtRange(s, e){ return fmtDay(s) + ' – ' + fmtDay(e); }
 
 /* First and last day of the calendar month containing d (YYYY-MM-DD). Used by
    the date-range presets (This month / Last month). */
