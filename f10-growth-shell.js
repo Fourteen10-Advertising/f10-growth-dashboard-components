@@ -212,7 +212,7 @@ function initDateRange(controls){
   document.addEventListener('keydown', (ev) => { if(ev.key === 'Escape') drClose(); });
   pop.querySelectorAll('.dr-nav').forEach(b => b.addEventListener('click', () => drShiftMonth(parseInt(b.dataset.nav, 10))));
   months.addEventListener('click', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d) drPickDay(c.dataset.d); });
-  months.addEventListener('mouseover', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d && F10G._dr.pending){ F10G._dr.hover = c.dataset.d; drRenderMonths(); } });
+  months.addEventListener('mouseover', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d && F10G._dr.pending){ F10G._dr.hover = c.dataset.d; drPaint(); } });
   document.getElementById('f10-dr-apply').addEventListener('click', drApply);
   document.getElementById('f10-dr-cancel').addEventListener('click', drClose);
 
@@ -259,7 +259,10 @@ function drPickDay(d){
     dr.selEnd = d < anchor ? anchor : d;
     dr.pending = false; dr.hover = null;
   }
-  drRenderMonths();
+  /* Repaint highlights in place rather than rebuilding the grid. Rebuilding
+     (innerHTML) would replace the day nodes mid-interaction, so a second click
+     would land on a node that no longer exists and never fire. */
+  drPaint();
   drRenderFoot();
 }
 
@@ -320,6 +323,17 @@ function drRenderMonths(){
   let m2 = dr.viewM + 1, y2 = dr.viewY;
   if(m2 > 11){ m2 = 0; y2++; }
   host.innerHTML = drMonthHTML(dr.viewY, dr.viewM) + drMonthHTML(y2, m2);
+}
+
+/* Update only the highlight classes on the existing day buttons, leaving the
+   DOM nodes intact so in-flight clicks still register. Used for selection and
+   hover; a full drRenderMonths rebuild is only for view changes (open/nav/preset). */
+function drPaint(){
+  const host = document.getElementById('f10-dr-months');
+  if(!host) return;
+  host.querySelectorAll('.dr-day').forEach(el => {
+    if(el.dataset && el.dataset.d) el.className = drDayClass(el.dataset.d);
+  });
 }
 
 function drDayClass(d){
