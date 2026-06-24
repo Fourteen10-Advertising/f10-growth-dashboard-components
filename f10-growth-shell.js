@@ -114,6 +114,11 @@ function renderGrowthDashboard(config){
   </div>`;
 
   wireShell(config);
+
+  if (window.F10A) {
+    F10A.init({ client: client, dashboardType: 'growth' });
+    F10A.track('dashboard_loaded', { report: report });
+  }
 }
 
 function wireShell(config){
@@ -149,6 +154,7 @@ function wireShell(config){
       document.querySelectorAll('#f10-gran button').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
       F10G.granularity = b.dataset.g;
+      if (window.F10A) F10A.track('granularity_changed', { granularity: F10G.granularity });
       loadActive();
     });
   });
@@ -165,7 +171,10 @@ function wireShell(config){
       }).join('');
       if(def.default != null) sel.value = def.default;
     }).catch(() => { sel.innerHTML = '<option value="">All</option>'; });
-    sel.addEventListener('change', loadActive);
+    sel.addEventListener('change', () => {
+      if (window.F10A) F10A.track('filter_changed', { filter: id, value: sel.value });
+      loadActive();
+    });
   });
 
   switchTab(config.initialTab || (config.tabs && config.tabs[0] && config.tabs[0].id));
@@ -275,6 +284,7 @@ function drApply(){
   document.getElementById('f10-end').value = e;
   drRenderTrigger();
   drClose();
+  if (window.F10A) F10A.track('date_range_changed', { start: s, end: e });
   loadActive();
 }
 
@@ -377,6 +387,7 @@ function switchTab(tabId){
 
   const tab = currentTab();
   document.getElementById('page-title').textContent = (tab && (tab.navLabel || tab.title)) || tabId;
+  if (window.F10A) F10A.track('tab_viewed', { tab: tabId, tab_label: (tab && (tab.navLabel || tab.title)) || tabId });
 
   /* Per-tab filter + granularity visibility */
   const wanted = (tab && tab.filters) || [];
@@ -423,8 +434,10 @@ async function loadActive(){
     await tab.load(ctx);
     const lu = document.getElementById('last-updated');
     if(lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString('en-AU');
+    if (window.F10A) F10A.track('data_loaded', { tab: tab.id, granularity: F10G.granularity });
   } catch (e) {
     showError(tab.id, 'Query error: ' + (e && e.message ? e.message : e));
+    if (window.F10A) F10A.track('data_error', { tab: tab.id, message: (e && e.message) ? e.message : String(e) });
     console.error(e);
   } finally {
     setLoading(false);
