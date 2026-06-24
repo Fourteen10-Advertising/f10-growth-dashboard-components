@@ -238,6 +238,7 @@ function drOpen(){
   dr.viewY = a.getFullYear(); dr.viewM = a.getMonth();
   document.getElementById('f10-dr-pop').hidden = false;
   document.getElementById('f10-dr-trigger').setAttribute('aria-expanded', 'true');
+  if (window.F10A) F10A.track('date_picker_opened', {});
   drRenderMonths();
   drRenderFoot();
 }
@@ -260,6 +261,7 @@ function drShiftMonth(delta){
 /* Day clicks only stage the selection; nothing commits until Apply. */
 function drPickDay(d){
   const dr = F10G._dr;
+  dr.source = 'manual';
   if(!dr.pending){
     dr.selStart = d; dr.selEnd = null; dr.pending = true; dr.hover = d;
   } else {
@@ -284,7 +286,11 @@ function drApply(){
   document.getElementById('f10-end').value = e;
   drRenderTrigger();
   drClose();
-  if (window.F10A) F10A.track('date_range_changed', { start: s, end: e });
+  if (window.F10A) F10A.track('date_range_changed', {
+    start: s, end: e,
+    source: dr.source || 'manual',
+    days: Math.round((new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / 86400000) + 1
+  });
   loadActive();
 }
 
@@ -317,6 +323,8 @@ function drRenderPresets(){
       const [s, e] = p.range();
       const dr = F10G._dr;
       dr.selStart = s; dr.selEnd = e; dr.pending = false; dr.hover = null;
+      dr.source = 'preset';
+      if (window.F10A) F10A.track('date_preset_clicked', { preset: p.label, start: s, end: e });
       const a = new Date(s + 'T00:00:00');
       dr.viewY = a.getFullYear(); dr.viewM = a.getMonth();
       drRenderMonths();
