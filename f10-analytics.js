@@ -30,6 +30,10 @@
 
   var F10A = {
     _ready: false,
+    _tab: null,
+    _tabLabel: null,
+    _tabStart: null,
+    _dwellWired: false,
 
     /** Initialise PostHog for this dashboard. Safe to call once per page. */
     init: function (opts) {
@@ -74,6 +78,7 @@
           }
         });
         this._ready = true;
+        this._wireDwell();
       } catch (e) {
         /* Never let analytics wiring break a client dashboard. Log loudly. */
         console.error('[f10-analytics] PostHog init failed', e);
@@ -82,6 +87,10 @@
 
     /** Emit a custom event. No-ops (with a warning) if PostHog is unavailable. */
     track: function (event, props) {
+      /* Tab dwell: every tab_viewed marks entry to a new tab, so we close out
+       * the previous tab's timer and emit time_on_tab for it. Lives here so no
+       * shell code changes — it rides on the tab_viewed events already sent. */
+      if (event === 'tab_viewed' && props) this._enterTab(props.tab, props.tab_label);
       if (!this._ready || !global.posthog || typeof global.posthog.capture !== 'function') {
         return;
       }
@@ -90,6 +99,40 @@
       } catch (e) {
         console.error('[f10-analytics] capture failed for ' + event, e);
       }
+    },
+
+    _now: function () {
+      return (global.performance && performance.now) ? performance.now() : Date.now();
+    },
+
+    /** Mark entry into a tab, flushing the previous tab's dwell time first. */
+    _enterTab: function (tab, label) {
+      this._flushTab();
+      this._tab = tab;
+      this._tabLabel = label || tab;
+      this._tabStart = this._now();
+    },
+
+    /** Emit time_on_tab for the currently-timed tab, then stop its timer. */
+    _flushTab: function () {
+      if (this._tab == null || this._tabStart == null) return;
+      var seconds = Math.round((this._now() - this._tabStart) / 1000);
+      this._tabStart = null;
+      if (seconds >= 1) {
+        this.track('time_on_tab', { tab: this._tab, tab_label: this._tabLabel, seconds: seconds });
+      }
+    },
+
+    /** Flush dwell on tab-away / page close; resume timing when visible again. */
+    _wireDwell: function () {
+      if (this._dwellWired || !global.document) return;
+      this._dwellWired = true;
+      var self = this;
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') self._flushTab();
+        else if (self._tab != null && self._tabStart == null) self._tabStart = self._now();
+      });
+      global.addEventListener('pagehide', function () { self._flushTab(); });
     }
   };
 
