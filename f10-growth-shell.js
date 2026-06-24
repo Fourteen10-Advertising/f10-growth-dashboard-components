@@ -57,6 +57,13 @@ function renderGrowthDashboard(config){
               <button type="button" class="dr-nav" data-nav="1" aria-label="Next month">›</button>
             </div>
             <div class="dr-months" id="f10-dr-months"></div>
+            <div class="dr-foot">
+              <span class="dr-sel" id="f10-dr-sel"></span>
+              <span class="dr-actions">
+                <button type="button" class="dr-btn dr-cancel" id="f10-dr-cancel">Cancel</button>
+                <button type="button" class="dr-btn dr-apply" id="f10-dr-apply" disabled>Apply</button>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -187,7 +194,9 @@ function initDateRange(controls){
   const days = controls.defaultDays != null ? controls.defaultDays : 13;
   const s = daysAgo(days), e = today();
   const ed = new Date(e + 'T00:00:00');
-  F10G._dr = { start: s, end: e, pending: null, hover: null, viewY: ed.getFullYear(), viewM: ed.getMonth() };
+  /* start/end = committed range (mirror of the hidden inputs). selStart/selEnd =
+     the staged selection inside the popover, only written back on Apply. */
+  F10G._dr = { start: s, end: e, selStart: s, selEnd: e, pending: false, hover: null, viewY: ed.getFullYear(), viewM: ed.getMonth() };
   document.getElementById('f10-start').value = s;
   document.getElementById('f10-end').value = e;
 
@@ -195,21 +204,33 @@ function initDateRange(controls){
   const pop = document.getElementById('f10-dr-pop');
   const months = document.getElementById('f10-dr-months');
   trigger.addEventListener('click', (ev) => { ev.stopPropagation(); pop.hidden ? drOpen() : drClose(); });
-  document.addEventListener('click', (ev) => { if(!pop.hidden && !ev.target.closest('#f10-daterange')) drClose(); });
+  /* Stop clicks inside the popover from reaching the outside-close handler. This
+     is essential: re-rendering the grid detaches the clicked node, so a bubbled
+     click would fail the closest() test and wrongly close the popover. */
+  pop.addEventListener('click', (ev) => ev.stopPropagation());
+  document.addEventListener('click', () => { if(!pop.hidden) drClose(); });
   document.addEventListener('keydown', (ev) => { if(ev.key === 'Escape') drClose(); });
   pop.querySelectorAll('.dr-nav').forEach(b => b.addEventListener('click', () => drShiftMonth(parseInt(b.dataset.nav, 10))));
   months.addEventListener('click', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d) drPickDay(c.dataset.d); });
   months.addEventListener('mouseover', (ev) => { const c = ev.target.closest('.dr-day'); if(c && c.dataset.d && F10G._dr.pending){ F10G._dr.hover = c.dataset.d; drRenderMonths(); } });
+  document.getElementById('f10-dr-apply').addEventListener('click', drApply);
+  document.getElementById('f10-dr-cancel').addEventListener('click', drClose);
 
   drRenderPresets();
   drRenderTrigger();
 }
 
 function drOpen(){
-  const pop = document.getElementById('f10-dr-pop');
-  pop.hidden = false;
+  const dr = F10G._dr;
+  /* Reset the staged selection to the committed range each open, so the first
+     day click always starts a fresh range rather than completing a stale one. */
+  dr.selStart = dr.start; dr.selEnd = dr.end; dr.pending = false; dr.hover = null;
+  const a = new Date((dr.start || today()) + 'T00:00:00');
+  dr.viewY = a.getFullYear(); dr.viewM = a.getMonth();
+  document.getElementById('f10-dr-pop').hidden = false;
   document.getElementById('f10-dr-trigger').setAttribute('aria-expanded', 'true');
   drRenderMonths();
+  drRenderFoot();
 }
 function drClose(){
   const pop = document.getElementById('f10-dr-pop');
@@ -227,17 +248,26 @@ function drShiftMonth(delta){
   drRenderMonths();
 }
 
+/* Day clicks only stage the selection; nothing commits until Apply. */
 function drPickDay(d){
   const dr = F10G._dr;
-  if(!dr.pending){ dr.pending = d; dr.start = d; dr.end = null; dr.hover = d; drRenderMonths(); return; }
-  const s = d < dr.pending ? d : dr.pending;
-  const e = d < dr.pending ? dr.pending : d;
-  drCommit(s, e);
+  if(!dr.pending){
+    dr.selStart = d; dr.selEnd = null; dr.pending = true; dr.hover = d;
+  } else {
+    const anchor = dr.selStart;
+    dr.selStart = d < anchor ? d : anchor;
+    dr.selEnd = d < anchor ? anchor : d;
+    dr.pending = false; dr.hover = null;
+  }
+  drRenderMonths();
+  drRenderFoot();
 }
 
-function drCommit(s, e){
+function drApply(){
   const dr = F10G._dr;
-  dr.start = s; dr.end = e; dr.pending = null; dr.hover = null;
+  if(!dr.selStart) return;
+  const s = dr.selStart, e = dr.selEnd || dr.selStart;
+  dr.start = s; dr.end = e; dr.pending = false; dr.hover = null;
   document.getElementById('f10-start').value = s;
   document.getElementById('f10-end').value = e;
   drRenderTrigger();
@@ -251,6 +281,18 @@ function drRenderTrigger(){
   if(label) label.textContent = (dr.start && dr.end) ? fmtRange(dr.start, dr.end) : 'Select dates';
 }
 
+/* Selection summary + Apply enablement, reflecting the staged (not committed) range. */
+function drRenderFoot(){
+  const dr = F10G._dr;
+  const sel = document.getElementById('f10-dr-sel');
+  const apply = document.getElementById('f10-dr-apply');
+  if(apply) apply.disabled = !dr.selStart;
+  if(!sel) return;
+  if(!dr.selStart) sel.textContent = 'Pick a start and end date';
+  else if(!dr.selEnd) sel.textContent = fmtDay(dr.selStart) + ' – pick end date';
+  else sel.textContent = fmtRange(dr.selStart, dr.selEnd);
+}
+
 function drRenderPresets(){
   const host = document.getElementById('f10-dr-presets');
   if(!host) return;
@@ -260,9 +302,12 @@ function drRenderPresets(){
     b.type = 'button'; b.className = 'dr-preset'; b.textContent = p.label;
     b.addEventListener('click', () => {
       const [s, e] = p.range();
-      const ed = new Date(e + 'T00:00:00');
-      F10G._dr.viewY = ed.getFullYear(); F10G._dr.viewM = ed.getMonth();
-      drCommit(s, e);
+      const dr = F10G._dr;
+      dr.selStart = s; dr.selEnd = e; dr.pending = false; dr.hover = null;
+      const a = new Date(s + 'T00:00:00');
+      dr.viewY = a.getFullYear(); dr.viewM = a.getMonth();
+      drRenderMonths();
+      drRenderFoot();
     });
     host.appendChild(b);
   });
@@ -281,10 +326,10 @@ function drDayClass(d){
   const dr = F10G._dr;
   let s, e;
   if(dr.pending){
-    const h = dr.hover || dr.pending;
-    s = dr.pending < h ? dr.pending : h;
-    e = dr.pending < h ? h : dr.pending;
-  } else { s = dr.start; e = dr.end; }
+    const h = dr.hover || dr.selStart;
+    s = dr.selStart < h ? dr.selStart : h;
+    e = dr.selStart < h ? h : dr.selStart;
+  } else { s = dr.selStart; e = dr.selEnd; }
   let cls = 'dr-day';
   if(s && d === s) cls += ' is-start';
   if(e && d === e) cls += ' is-end';

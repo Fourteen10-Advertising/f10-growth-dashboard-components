@@ -94,6 +94,15 @@ html, body { height: 100%; font-family: 'Archivo', system-ui, sans-serif; backgr
 .dr-day.is-start { border-radius: 4px 0 0 4px; }
 .dr-day.is-end { border-radius: 0 4px 4px 0; }
 .dr-day.is-start.is-end { border-radius: 4px; }
+/* Footer: selection summary + Apply / Cancel */
+.dr-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--paper); }
+.dr-sel { font-size: 12px; color: var(--grey); }
+.dr-actions { display: flex; gap: 8px; }
+.dr-btn { font-family: inherit; font-size: 12px; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: 1px solid var(--paper-dark); }
+.dr-cancel { background: var(--white); color: var(--grey); }
+.dr-cancel:hover { color: var(--ink); }
+.dr-apply { background: var(--young-blood); color: var(--stabilo); border-color: var(--young-blood); }
+.dr-apply:disabled { opacity: 0.45; cursor: default; }
 .seg { display: inline-flex; border: 1px solid var(--paper-dark); border-radius: 4px; overflow: hidden; }
 .seg button { font-family: inherit; font-size: 11px; padding: 6px 11px; border: none; background: var(--white); color: var(--grey); cursor: pointer; letter-spacing: 0.04em; }
 .seg button.active { background: var(--young-blood); color: var(--stabilo); }
