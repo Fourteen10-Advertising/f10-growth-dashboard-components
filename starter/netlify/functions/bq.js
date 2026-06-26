@@ -63,7 +63,12 @@ exports.handler = async (event) => {
     }
 
     const token     = await getAccessToken(sa);
-    const projectId = sa.project_id;
+    // Run/bill all jobs against the F10 BigQuery project (org policy: always
+    // mcc-poc-477801). Never use sa.project_id - a credential whose home
+    // project differs, or a stray Netlify env override, silently 500s every
+    // query (took down all growth dashboards 2026-06-26 while creative, which
+    // pins this value, stayed up).
+    const projectId = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
     const result    = await runQuery(projectId, token, query);
 
     return { statusCode: 200, headers: cors(event), body: JSON.stringify(result) };
