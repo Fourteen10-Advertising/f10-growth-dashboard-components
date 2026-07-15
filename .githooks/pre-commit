@@ -1,0 +1,29 @@
+#!/bin/sh
+# doc-sync guard: if code/config is staged but no docs are, block the commit so
+# documentation moves with the code instead of drifting until handoff.
+# Bypass for genuine no-doc commits: `SKIP_DOC_CHECK=1 git commit ...`  or  `git commit --no-verify`.
+[ "${SKIP_DOC_CHECK:-0}" = "1" ] && exit 0
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+code=0; docs=0
+for f in $staged; do
+  case "$f" in
+    *.md|README*|*/README*|docs/*|*/docs/*|CHANGELOG*) docs=1 ;;
+  esac
+  case "$f" in
+    *.py|*.ts|*.tsx|*.js|*.jsx|*.go|*.rs|*.sql|*.sh|*.yaml|*.yml|Dockerfile|*/Dockerfile) code=1 ;;
+  esac
+done
+
+if [ "$code" = "1" ] && [ "$docs" = "0" ]; then
+  echo "" >&2
+  echo "  doc-sync: code/config changed but no docs are staged." >&2
+  echo "  Update the README/docs in THIS commit so they stay current." >&2
+  echo "  If this change genuinely needs no docs:" >&2
+  echo "    SKIP_DOC_CHECK=1 git commit ...    (or)    git commit --no-verify" >&2
+  echo "" >&2
+  exit 1
+fi
+exit 0
