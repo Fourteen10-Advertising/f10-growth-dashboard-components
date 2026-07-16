@@ -170,3 +170,13 @@ Because dashboards pin to a tag, a dashboard pointing at `@vX.Y.Z` 404s its asse
 ## Dashboards using this library
 
 - `fourteen10-advertising/bridgit-dashboard` (pilot)
+## Doc-sync
+
+Documentation moves with code in this repo:
+
+- **CI (enforced):** the `doc-sync` GitHub Action fails a PR/push when code or
+  config changes without a docs change. Add `[skip-docs]` to a commit message
+  to bypass a change that genuinely needs none.
+- **Local (fast catch):** after cloning, run once — `git config core.hooksPath
+  .githooks` (or `sh .githooks/setup.sh`) — to enable the pre-commit hook that
+  checks the same thing before you commit.

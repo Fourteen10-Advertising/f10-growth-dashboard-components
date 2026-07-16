@@ -1,0 +1,38 @@
+name: doc-sync
+# Fail a PR/push when code or config changes without a matching docs change,
+# so documentation moves with the code. Bypass a legitimate no-doc change by
+# putting [skip-docs] in a commit message.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+jobs:
+  doc-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Docs must move with code
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" >/dev/null 2>&1 || true
+            range="origin/${{ github.base_ref }}...HEAD"
+          else
+            before="${{ github.event.before }}"
+            case "$before" in *[!0]*) range="$before..${{ github.sha }}" ;; *) echo "initial push — skipping"; exit 0 ;; esac
+          fi
+          if git log --format=%B "$range" | grep -qiF '[skip-docs]'; then
+            echo "[skip-docs] marker present — passing"; exit 0
+          fi
+          files=$(git diff --name-only "$range")
+          echo "changed files:"; echo "$files"
+          code=$(printf '%s\n' "$files" | grep -Ei '\.(py|ts|tsx|js|jsx|go|rs|sql|sh|ya?ml)$|(^|/)Dockerfile$' || true)
+          docs=$(printf '%s\n' "$files" | grep -Ei '\.md$|(^|/)README|(^|/)docs/|(^|/)CHANGELOG' || true)
+          if [ -n "$code" ] && [ -z "$docs" ]; then
+            echo "::error::doc-sync: code/config changed but no docs were updated. Update the README/docs in this change, or add [skip-docs] to a commit message if none are needed."
+            exit 1
+          fi
+          echo "doc-sync OK"
