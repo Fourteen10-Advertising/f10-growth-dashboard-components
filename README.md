@@ -14,7 +14,7 @@ This keeps the look, feel, and plumbing identical across clients while leaving f
 | File | Purpose |
 |---|---|
 | `f10-growth-shared.css` | All shared styles: F10 brand tokens, sidebar, header, controls bar, KPI cards, tables, chart cards, badges, info/warn boxes, loading overlay |
-| `f10-growth-core.js` | Toolkit: `runQuery()`/`parseBQ()`, formatters (`fmtAUD`, `fmtK`, `fmtPct`, `pct`, `chg`…), date/period maths (`computePeriods`, `gGroup`), `sqlStr()`/`sqlDate()`, and the `kpiCard()` / `buildTable()` / `makeChart()` builders |
+| `f10-growth-core.js` | Toolkit: `runQuery()`/`parseBQ()`, formatters (`fmtAUD`, `fmtK`, `fmtPct`, `pct`, `chg`…), date/period maths (`computePeriods`, `gGroup`), `sqlStr()`/`sqlDate()`, and the `kpiCard()` / `buildTable()` / `makeChart()` / `f10ComboChart()` / `f10ToggleChart()` builders |
 | `f10-growth-shell.js` | `renderGrowthDashboard(config)` — builds the chrome from a manifest and wires all orchestration. Load AFTER core |
 
 ## How to use in a dashboard
@@ -126,6 +126,60 @@ The entire dashboard body is `<div id="app"></div>`. Define a config manifest, l
 ```
 
 Use `gGroup(field, ctx.granularity)` for trend grouping and `computePeriods` (already applied to `ctx.dates`) for YoY/PoP comparisons.
+
+## Charts
+
+Two shared chart builders sit on top of `makeChart()`:
+
+### `f10ComboChart(canvasId, labels, series, opts?)`
+
+A multi-axis bars + lines chart in the F10 growth "trend" look. Spend bars sit on the left `$` axis; each line lands on an axis chosen by its `axis` field:
+
+| `axis` | Axis | Use for |
+|---|---|---|
+| `cur` | left `$` | spend / revenue (bars or lines) |
+| `cnt` | right count | volumes (leads, clicks, deals) |
+| `cost` | right `$`, dashed | cost metrics (CPC, CPA) |
+| `cpl` | separate right `$`, dashed | a cost metric an order of magnitude below `cost` that needs its own scale |
+
+An axis is created only when a **visible** series uses it, so dropping a metric also drops its axis and keeps the chart readable.
+
+```js
+f10ComboChart('trend', labels, [
+  { label: 'Ad Spend', data: spend, kind: 'bar',  axis: 'cur',  color: '#64748b' },
+  { label: 'ROAS',     data: roas,  kind: 'line', axis: 'cnt',  color: '#f59e0b' },
+  { label: 'CPA',      data: cpa,   kind: 'line', axis: 'cost', color: '#fa023c' },
+]);
+```
+
+`opts`: `{ moneyTick, tooltip }` — optional Chart.js overrides (defaults format AUD and special-case ROAS as `Nx`).
+
+### `f10ToggleChart(canvasId, togglesId, labels, series, opts?)`
+
+The same chart **plus a metric-toggle chip row** rendered into the element with id `togglesId`. Each chip shows/hides one metric; a hidden metric leaves the chart entirely — axis included. This is the F10 answer to *"don't ship a second, near-identical chart just to isolate one metric"*: ship one chart and let the reader choose what to see.
+
+Series accept two extra fields:
+
+- `key` — stable id for a series (falls back to `label`). Toggle state is keyed on it and **persists across redraws**, so re-calling with fresh data (after a horizon or filter change) keeps the viewer's selection.
+- `on: false` — start the metric hidden. `toggle: false` — always show it and give it no chip (e.g. the spend bar).
+
+```html
+<div class="chart-card-head">
+  <div class="chart-card-title">Spend vs ROAS, CPA &amp; CPL</div>
+  <div class="metric-seg" id="cohort-metrics"></div>
+</div>
+<div class="chart-wrap"><canvas id="cohort-trend"></canvas></div>
+```
+```js
+f10ToggleChart('cohort-trend', 'cohort-metrics', labels, [
+  { key: 'spend', label: 'Ad Spend', data: spend, kind: 'bar',  axis: 'cur',  color: '#64748b' },
+  { key: 'roas',  label: 'ROAS',     data: roas,  kind: 'line', axis: 'cnt',  color: '#f59e0b' },
+  { key: 'cpa',   label: 'CPA',      data: cpa,   kind: 'line', axis: 'cost', color: '#fa023c' },
+  { key: 'cpl',   label: 'CPL',      data: cpl,   kind: 'line', axis: 'cpl',  color: '#a78bfa' },
+]);
+```
+
+Chips use the `.metric-seg` style (a multi-select cousin of `.seg`).
 
 ## Theming / branding
 

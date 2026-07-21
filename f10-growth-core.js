@@ -132,3 +132,110 @@ function makeChart(id, config){
   _f10Charts[id] = new Chart(ctx, config);
   return _f10Charts[id];
 }
+
+/* ── Combo trend chart ──
+ * Multi-axis bars + lines in the F10 growth "trend" look. Bars sit on the left
+ * $ axis; each line lands on an axis chosen by `axis`:
+ *   'cur'  → left $ (yCur)                'cnt'  → right count (yCnt)
+ *   'cost' → right $, dashed (yCost)      'cpl'  → separate right $, dashed
+ *            (yCpl) for a metric that sits orders of magnitude below yCost and
+ *            so needs its own scale.
+ * A y-axis is created only when a series actually uses it, so dropping a metric
+ * (see f10ToggleChart) also drops its axis and the chart stays readable.
+ * series: [{ label, data, kind:'bar'|'line', axis, color }]
+ * opts:   { moneyTick?, tooltip? } optional Chart.js overrides. */
+function f10MoneyTick(v){
+  const x = parseFloat(v);
+  if(isNaN(x)) return '';
+  if(Math.abs(x) >= 1000) return '$' + (x / 1000).toLocaleString('en-AU', { maximumFractionDigits: 1 }) + 'k';
+  if(Math.abs(x) < 10 && x !== 0) return '$' + x.toFixed(2);
+  return '$' + x.toLocaleString('en-AU', { maximumFractionDigits: 0 });
+}
+
+function f10ComboChart(canvasId, labels, series, opts = {}){
+  const moneyTick = opts.moneyTick || f10MoneyTick;
+  const axisId = s => s.axis === 'cnt' ? 'yCnt' : s.axis === 'cost' ? 'yCost' : s.axis === 'cpl' ? 'yCpl' : 'yCur';
+  const datasets = series.map(s => s.kind === 'bar'
+    ? { type: 'bar', label: s.label, data: s.data, backgroundColor: s.color, yAxisID: axisId(s), order: 2, borderRadius: 3 }
+    : { type: 'line', label: s.label, data: s.data, borderColor: s.color, backgroundColor: s.color, yAxisID: axisId(s),
+        tension: 0.3, pointRadius: 2.5, borderWidth: 2, borderDash: (s.axis === 'cost' || s.axis === 'cpl') ? [5, 4] : [], spanGaps: true, order: 1 });
+  const scales = {
+    x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true } },
+    yCur: { position: 'left', beginAtZero: true, ticks: { callback: moneyTick, font: { size: 10 } } },
+  };
+  if(series.some(s => s.axis === 'cnt'))  scales.yCnt  = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 10 } } };
+  if(series.some(s => s.axis === 'cost')) scales.yCost = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: moneyTick, font: { size: 10 } } };
+  // A metric an order of magnitude below yCost (e.g. CPL vs CPA) gets its own
+  // right axis; with two $ axes on the right, tint each axis's ticks to match
+  // its line so they can be told apart.
+  if(series.some(s => s.axis === 'cpl')){
+    scales.yCpl = { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { callback: moneyTick, font: { size: 10 }, color: (series.find(s => s.axis === 'cpl') || {}).color } };
+    if(scales.yCost) scales.yCost.ticks.color = (series.find(s => s.axis === 'cost') || {}).color;
+  }
+  return makeChart(canvasId, {
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: opts.tooltip || { callbacks: { label: c => {
+          const v = c.parsed.y;
+          if(v === null || v === undefined) return c.dataset.label + ': —';
+          if(/roas/i.test(c.dataset.label)) return c.dataset.label + ': ' + v.toFixed(2) + 'x';
+          if(c.dataset.yAxisID === 'yCnt') return c.dataset.label + ': ' + fmt(v, v % 1 !== 0 ? 1 : 0);
+          const dp = Math.abs(v) < 100 ? 2 : 0;
+          return c.dataset.label + ': $' + v.toLocaleString('en-AU', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+        } } },
+      },
+      scales,
+    },
+  });
+}
+
+/* ── Combo trend chart with metric toggles ──
+ * Same chart as f10ComboChart, plus a chip row (rendered into the element with
+ * id `togglesId`) that lets the viewer show or hide individual metrics. A hidden
+ * metric leaves the chart entirely — including its y-axis — so ONE chart can
+ * carry several metrics without drawing them all at once. This is the F10 answer
+ * to "don't ship a second, near-identical chart just to isolate one metric":
+ * ship one chart and let the reader pick what they want to see.
+ *
+ * Toggle state is keyed by each series' `key` (falling back to `label`) and
+ * persists across redraws, so re-calling this with fresh data — after a horizon
+ * or filter change, say — keeps the viewer's chosen metrics selected.
+ *
+ * series: [{ key?, label, data, kind, axis, color, on=true, toggle=true }]
+ *   on:false     → metric starts hidden
+ *   toggle:false → metric is always shown and gets no chip (e.g. the spend bar)
+ * opts: forwarded to f10ComboChart. */
+const _f10ToggleState = {};
+function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
+  const keyOf = s => s.key || s.label;
+  const state = _f10ToggleState[canvasId] || (_f10ToggleState[canvasId] = {});
+  series.forEach(s => { const k = keyOf(s); if(!(k in state)) state[k] = s.on !== false; });
+
+  const draw = () => f10ComboChart(canvasId, labels, series.filter(s => s.toggle === false || state[keyOf(s)]), opts);
+
+  const toggles = document.getElementById(togglesId);
+  if(toggles){
+    toggles.innerHTML = series.filter(s => s.toggle !== false).map(s => {
+      const k = keyOf(s);
+      return `<button type="button" data-k="${String(k).replace(/"/g, '&quot;')}"${state[k] ? ' class="active"' : ''}>`
+        + `<span class="metric-dot" style="background:${s.color}"></span>${s.label}</button>`;
+    }).join('');
+    // Delegate on the container so the listener survives innerHTML rebuilds; bind once.
+    if(!toggles._f10Bound){
+      toggles.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-k]');
+        if(!btn) return;
+        const k = btn.dataset.k;
+        state[k] = !state[k];
+        btn.classList.toggle('active', state[k]);
+        draw();
+      });
+      toggles._f10Bound = true;
+    }
+  }
+  return draw();
+}
