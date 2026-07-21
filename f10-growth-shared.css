@@ -107,6 +107,17 @@ html, body { height: 100%; font-family: 'Archivo', system-ui, sans-serif; backgr
 .seg button { font-family: inherit; font-size: 11px; padding: 6px 11px; border: none; background: var(--white); color: var(--grey); cursor: pointer; letter-spacing: 0.04em; }
 .seg button.active { background: var(--young-blood); color: var(--stabilo); }
 
+/* Metric toggle chips — a multi-select row for combo charts (f10ToggleChart).
+   Unlike .seg (a single-select segmented control), any number can be active at
+   once: each chip shows/hides one metric on the chart. */
+.metric-seg { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.metric-seg button { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: 11px; padding: 5px 10px; border: 1px solid var(--paper-dark); border-radius: 999px; background: var(--white); color: var(--grey); cursor: pointer; letter-spacing: 0.04em; transition: background .12s, color .12s, border-color .12s, opacity .12s; }
+.metric-seg button:hover { border-color: var(--young-blood); }
+.metric-seg button.active { background: var(--young-blood); color: var(--stabilo); border-color: var(--young-blood); }
+.metric-seg button:not(.active) { opacity: 0.6; }
+.metric-seg button:not(.active) .metric-dot { opacity: 0.4; }
+.metric-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
 /* ── Content + sections ── */
 #content { flex: 1; overflow-y: auto; padding: 24px 28px 48px; }
 .section { display: none; }
