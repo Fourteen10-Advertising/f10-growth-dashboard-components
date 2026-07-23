@@ -65,8 +65,8 @@ The entire dashboard body is `<div id="app"></div>`. Define a config manifest, l
           const d = ctx.dates, g = ctx.filters.group;
           const where = g ? ` AND group_name = '${sqlStr(g)}'` : '';
           const rows = await runQuery(`
-            SELECT campaign_name, SUM(ad_spend) AS spend, SUM(clicks) AS clicks
-            FROM \`mcc-poc-477801.acme_clean.google_daily_campaign_performance\`
+            SELECT campaign_name, SUM(spend) AS spend, SUM(clicks) AS clicks
+            FROM \`mcc-poc-477801.acme_marts.gads_campaign_daily\`
             WHERE date_start BETWEEN '${d.s}' AND '${d.e}'${where}
             GROUP BY campaign_name ORDER BY spend DESC`);
           const tot = rows.reduce((a, r) => a + n(r.spend), 0);

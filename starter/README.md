@@ -10,7 +10,7 @@ loaders.
 1. Copy the contents of this `starter/` folder to the root of the new repo.
 2. Edit `index.html`:
    - `<title>` and `clientName` → the client.
-   - `DATASET` → the client's BigQuery dataset (e.g. `acme_clean`).
+   - `DATASET` → the client's BigQuery dataset (e.g. `acme_marts`).
    - Replace the example `tabs` with the client's real sections. Each tab needs a
      `body` (the HTML it renders into) and a `load(ctx)` (its SQL + render). Use
      the shared builders (`kpiCard`, `buildTable`, `makeChart`) and helpers
