@@ -14,7 +14,7 @@ This keeps the look, feel, and plumbing identical across clients while leaving f
 | File | Purpose |
 |---|---|
 | `f10-growth-shared.css` | All shared styles: F10 brand tokens, sidebar, header, controls bar, KPI cards, tables, chart cards, badges, info/warn boxes, loading overlay |
-| `f10-growth-core.js` | Toolkit: `runQuery()`/`parseBQ()`, formatters (`fmtAUD`, `fmtK`, `fmtPct`, `pct`, `chg`…), date/period maths (`computePeriods`, `gGroup`), `sqlStr()`/`sqlDate()`, and the `kpiCard()` / `buildTable()` / `makeChart()` / `f10ComboChart()` / `f10ToggleChart()` builders |
+| `f10-growth-core.js` | Toolkit: `runQuery()`/`parseBQ()`, formatters (`fmtAUD`, `fmtK`, `fmtPct`, `pct`, `chg`…), date/period maths (`computePeriods`, `gGroup`), `sqlStr()`/`sqlDate()`, and the `kpiCard()` / `buildTable()` (sortable) / `makeChart()` / `f10ComboChart()` / `f10ToggleChart()` builders |
 | `f10-growth-shell.js` | `renderGrowthDashboard(config)` — builds the chrome from a manifest and wires all orchestration. Load AFTER core |
 
 ## How to use in a dashboard
@@ -126,6 +126,36 @@ The entire dashboard body is `<div id="app"></div>`. Define a config manifest, l
 ```
 
 Use `gGroup(field, ctx.granularity)` for trend grouping and `computePeriods` (already applied to `ctx.dates`) for YoY/PoP comparisons.
+
+## Tables
+
+### `buildTable(containerId, headers, rows, opts?)`
+
+`headers` is `[{ label, num }]`; `rows` is an array of arrays of cell HTML/strings.
+Columns flagged `num: true` are right-aligned with tabular figures.
+
+**Every table is sortable by default.** Clicking a header cycles
+**ascending → descending → original order**, and the active column shows a ▲/▼
+indicator. `num: true` columns sort numerically, the rest alphabetically. Ties and
+empty cells keep their original relative order (the sort is stable), and empty
+cells (`—`, blank, `null`) always sort last regardless of direction. Pass
+`{ sortable: false }` to opt a table out.
+
+Sort state is keyed by container id and **persists across redraws**, so changing a
+filter, date range, or granularity keeps the viewer's chosen sort instead of
+snapping back to default.
+
+A cell's sortable value is the text **before any markup**, so a primary value with
+a decoration appended sorts on the primary value:
+
+```js
+// sorts on 124655, not on the +5.7% delta chip
+`${fmtAUDFull(spend)}<div class="kpi-change change-up">+5.7%</div>`
+```
+
+Numeric parsing strips `$`, thousands commas, a trailing `%`, and a trailing `x`
+(so `$124,655`, `25.4%`, and `7.03x` all sort correctly). Keep the primary value
+first in the cell and append any decoration after it.
 
 ## Charts
 

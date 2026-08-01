@@ -157,6 +157,13 @@ tbody tr:last-child { border-bottom: none; }
 tbody td { padding: 9px 12px; color: var(--ink); white-space: nowrap; }
 tbody tr:hover { background: rgba(75,0,15,0.03); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Sortable headers: click cycles asc → desc → original order. The indicator keeps
+   a fixed width so the header row does not shift as the sort changes. */
+thead th.sortable { cursor: pointer; user-select: none; }
+thead th.sortable:hover { color: var(--young-blood); background: var(--paper-dark); }
+.sort-ind { display: inline-block; width: 0.9em; margin-left: 4px; font-size: 9px; line-height: 1; color: var(--young-blood); opacity: 0; }
+thead th.sortable:hover .sort-ind { opacity: 0.45; }
+.sort-ind.active { opacity: 1; }
 .name-cell { font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Badges ── */
