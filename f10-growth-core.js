@@ -111,15 +111,85 @@ function kpiCard(label, value, sub, curr, prev, invert = false, opts = {}){
   </div>`;
 }
 
+/* ── Sortable-table support ──
+ * Sort state per table container, so a sort survives a redraw (filter/date
+ * change) instead of snapping back. Keyed by container id.
+ * { col: <index|null>, dir: 0 none | 1 asc | -1 desc } */
+const _f10TableState = {};
+
+/* The sortable value of a cell.
+ * A cell's PRIMARY value is the text before any markup, so a value with a
+ * decoration appended — e.g. `$1,234<div class="kpi-change">+5.7%</div>` — sorts
+ * on `$1,234`, not on the delta. Numeric columns strip `$`, thousands commas, a
+ * trailing `%`, and a trailing `x` (ROAS), and treat blank/`—` as empty so those
+ * rows sort last in both directions. Non-numeric columns compare lower-cased text. */
+function f10SortValue(cell, isNum){
+  const raw = cell == null ? '' : String(cell);
+  let txt = raw.split('<')[0];
+  if(!txt.trim()) txt = raw.replace(/<[^>]*>/g, ' ');
+  txt = txt.replace(/&nbsp;/g, ' ').trim();
+  if(!isNum) return txt.toLowerCase();
+  if(!txt || txt === '—' || txt === '-') return null;
+  const v = parseFloat(txt.replace(/[$,\s]/g, '').replace(/%$/, '').replace(/x$/i, ''));
+  return isNaN(v) ? null : v;
+}
+
 /* ── Table builder ──
- * headers: [{ label, num }]  rows: array of arrays of cell HTML/strings. */
-function buildTable(containerId, headers, rows){
+ * headers: [{ label, num }]  rows: array of arrays of cell HTML/strings.
+ * opts.sortable — set false to opt out of sorting (default on).
+ *
+ * Headers are clickable and cycle ascending → descending → original order.
+ * Columns flagged `num: true` sort numerically, the rest alphabetically; ties and
+ * empty cells keep their original relative order (stable), and empties sort last. */
+function buildTable(containerId, headers, rows, opts = {}){
   const el = document.getElementById(containerId);
   if(!el) return;
-  if(!rows || !rows.length){ el.innerHTML = '<p class="no-data">No data for this period.</p>'; return; }
-  const ths = headers.map(h => `<th class="${h.num ? 'num' : ''}">${h.label}</th>`).join('');
-  const trs = rows.map(r => `<tr>${r.map((cell, i) => `<td class="${headers[i] && headers[i].num ? 'num' : ''}">${cell == null ? '—' : cell}</td>`).join('')}</tr>`).join('');
+  if(!rows || !rows.length){
+    el.innerHTML = '<p class="no-data">No data for this period.</p>';
+    delete _f10TableState[containerId];
+    return;
+  }
+
+  const sortable = opts.sortable !== false;
+  const st = _f10TableState[containerId] || (_f10TableState[containerId] = { col: null, dir: 0 });
+  if(st.col != null && st.col >= headers.length){ st.col = null; st.dir = 0; }
+
+  let view = rows;
+  if(sortable && st.col != null && st.dir !== 0){
+    const isNum = !!(headers[st.col] && headers[st.col].num);
+    view = rows.map((r, i) => ({ r, i })).sort((a, b) => {
+      const av = f10SortValue(a.r[st.col], isNum), bv = f10SortValue(b.r[st.col], isNum);
+      const aEmpty = av === null || av === '', bEmpty = bv === null || bv === '';
+      if(aEmpty && bEmpty) return a.i - b.i;
+      if(aEmpty) return 1;
+      if(bEmpty) return -1;
+      const c = isNum ? (av - bv) : String(av).localeCompare(String(bv));
+      return c === 0 ? a.i - b.i : (st.dir === 1 ? c : -c);
+    }).map(x => x.r);
+  }
+
+  const ind = i => {
+    if(!sortable) return '';
+    const on = st.col === i && st.dir !== 0;
+    return `<span class="sort-ind${on ? ' active' : ''}">${on ? (st.dir === 1 ? '▲' : '▼') : '↕'}</span>`;
+  };
+  const ths = headers.map((h, i) =>
+    `<th class="${h.num ? 'num' : ''}${sortable ? ' sortable' : ''}"${sortable ? ` data-f10col="${i}"` : ''}>${h.label}${ind(i)}</th>`).join('');
+  const trs = view.map(r => `<tr>${r.map((cell, i) => `<td class="${headers[i] && headers[i].num ? 'num' : ''}">${cell == null ? '—' : cell}</td>`).join('')}</tr>`).join('');
   el.innerHTML = `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+
+  if(sortable){
+    el.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const i = Number(th.getAttribute('data-f10col'));
+        if(st.col === i){
+          st.dir = st.dir === 0 ? 1 : (st.dir === 1 ? -1 : 0);
+          if(st.dir === 0) st.col = null;
+        } else { st.col = i; st.dir = 1; }
+        buildTable(containerId, headers, rows, opts);
+      });
+    });
+  }
 }
 
 /* ── Chart builder ──
