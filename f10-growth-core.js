@@ -309,3 +309,174 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
   }
   return draw();
 }
+
+// ── Budget pacing tab ─────────────────────────────────────────────────────────
+// f10PacingTab(cfg) returns a tab object ({id,group,navLabel,title,sub,body,load})
+// to spread into config.tabs. It shows month-to-date actuals vs the full-month
+// target prorated by days elapsed — per platform and blended — with a status
+// table and two stacked through-the-month charts (cumulative actual vs a dashed
+// target-pace line). It reads a governed targets table plus the client's actuals
+// mart, so it never touches the source sheet.
+//
+// cfg = {
+//   id, group, navLabel, title, sub, dot,     // optional chrome (sensible defaults)
+//   targetsTable,                             // '{project}.{client}_reporting.pacing_targets'
+//   actuals: { table, dateField, channelField, spend, revenue },
+//   platformMap,                              // { gads:'Google Ads', meta:'Meta', linkedin:'LinkedIn' }
+//   revenueNote,                              // optional caveat appended to the info box
+// }
+const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
+
+function f10PaceStatus(pace, kind){
+  if(pace === null || !isFinite(pace)) return { cls: 'badge-grey', label: '—' };
+  if(pace < F10_PACE_BEHIND) return kind === 'spend'
+    ? { cls: 'badge-blue', label: 'Under' } : { cls: 'badge-red', label: 'Behind' };
+  if(pace > F10_PACE_AHEAD) return kind === 'spend'
+    ? { cls: 'badge-orange', label: 'Over' } : { cls: 'badge-green', label: 'Ahead' };
+  return { cls: 'badge-green', label: 'On track' };
+}
+function f10PaceBadge(pace, kind){ const s = f10PaceStatus(pace, kind); return `<span class="badge ${s.cls}">${s.label}</span>`; }
+function f10PaceFmt(pace){ return (pace === null || !isFinite(pace)) ? '—' : Math.round(pace * 100) + '%'; }
+
+// Through-the-month cumulative chart: blended actual (solid, stops at the latest
+// data day) vs a straight target-pace line to the full-month target.
+function f10PacingChart(canvasId, dim, latestDay, dailyByChannel, metric, target){
+  const labels = Array.from({ length: dim }, (_, i) => String(i + 1));
+  const dayTotal = new Array(dim).fill(0);
+  Object.values(dailyByChannel).forEach(byDay => {
+    Object.entries(byDay).forEach(([day, v]) => { const d = +day; if(d >= 1 && d <= dim) dayTotal[d-1] += n(v[metric]); });
+  });
+  let acc = 0;
+  const cumulative = dayTotal.map((v, i) => { acc += v; return i < latestDay ? acc : null; });
+  const paceLine = labels.map((_, i) => target * (i + 1) / dim);
+  const ink = getCSS('--ink') || '#000', grey = getCSS('--grey') || '#727272';
+  makeChart(canvasId, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Actual (cumulative)', data: cumulative, borderColor: ink, backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 4, tension: 0.15, spanGaps: false },
+      { label: 'Target pace', data: paceLine, borderColor: grey, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, tension: 0 },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { boxWidth: 8, padding: 10, font: { size: 10 } } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y === null ? '—' : fmtAUD(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxTicksLimit: 16 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => f10MoneyTick(v) } },
+      },
+    },
+  });
+}
+
+function f10PacingTab(cfg){
+  const id = cfg.id || 'pacing';
+  const platformMap = cfg.platformMap || { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn' };
+  const a = cfg.actuals || {};
+  const dateField = a.dateField || 'date_start';
+  const channelField = a.channelField || 'channel';
+  const spendCol = a.spend || 'spend';
+  const revCol = a.revenue || 'revenue';
+
+  async function load(){
+    const host = document.getElementById(id + '-body');
+    if(!host) return;
+
+    const targetsSQL = `SELECT FORMAT_DATE('%Y-%m-%d', month) AS month, platform, group_name, target_spend, target_revenue FROM \`${cfg.targetsTable}\``;
+    const actualsSQL = `
+      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      SELECT ${channelField} AS channel,
+             FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
+             CAST((SELECT d FROM latest) AS STRING) AS latest_date,
+             ROUND(SUM(${spendCol}), 2) AS spend,
+             ROUND(SUM(${revCol}), 2) AS revenue
+      FROM \`${a.table}\`
+      WHERE ${dateField} >= DATE_TRUNC((SELECT d FROM latest), MONTH)
+        AND ${dateField} <= (SELECT d FROM latest)
+      GROUP BY channel, date`;
+
+    const [targets, actuals] = await Promise.all([runQuery(targetsSQL), runQuery(actualsSQL)]);
+    if(!actuals.length){ host.innerHTML = '<div class="info-box">No performance data available.</div>'; return; }
+
+    const latest = actuals[0].latest_date;
+    const currentMonth = startOfMonth(latest);
+    const dim = new Date(Date.UTC(+latest.slice(0, 4), +latest.slice(5, 7), 0)).getUTCDate();
+    const elapsed = +latest.slice(8, 10);
+
+    const mtd = {}, daily = {};
+    actuals.forEach(r => {
+      const ch = r.channel;
+      (mtd[ch] = mtd[ch] || { spend: 0, revenue: 0 });
+      mtd[ch].spend += n(r.spend); mtd[ch].revenue += n(r.revenue);
+      const day = +String(r.date).slice(8, 10);
+      (daily[ch] = daily[ch] || {})[day] = { spend: n(r.spend), revenue: n(r.revenue) };
+    });
+
+    const tgt = {};
+    targets.filter(t => String(t.month).slice(0, 10) === currentMonth).forEach(t => {
+      const ch = platformMap[String(t.platform).toLowerCase()];
+      if(!ch) return;
+      (tgt[ch] = tgt[ch] || { spend: 0, revenue: 0 });
+      tgt[ch].spend += n(t.target_spend); tgt[ch].revenue += n(t.target_revenue);
+    });
+
+    const frac = dim ? elapsed / dim : 0;
+    const paceRow = (channel, act, tg) => {
+      const es = tg.spend * frac, er = tg.revenue * frac;
+      return { channel, a_spend: act.spend, t_spend: tg.spend, e_spend: es, p_spend: es ? act.spend / es : null,
+               a_rev: act.revenue, t_rev: tg.revenue, e_rev: er, p_rev: er ? act.revenue / er : null };
+    };
+    const rows = Object.values(platformMap)
+      .filter(ch => tgt[ch] && (tgt[ch].spend || tgt[ch].revenue))
+      .map(ch => paceRow(ch, mtd[ch] || { spend: 0, revenue: 0 }, tgt[ch]));
+    if(!rows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
+
+    const aBl = rows.reduce((x, r) => ({ spend: x.spend + r.a_spend, revenue: x.revenue + r.a_rev }), { spend: 0, revenue: 0 });
+    const tBl = rows.reduce((x, r) => ({ spend: x.spend + r.t_spend, revenue: x.revenue + r.t_rev }), { spend: 0, revenue: 0 });
+    const blended = paceRow('Blended', aBl, tBl);
+
+    const monthLabel = new Date(currentMonth + 'T00:00:00').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+    const impliedRoas = blended.t_spend ? blended.t_rev / blended.t_spend : null;
+    const actualRoas = blended.a_spend ? blended.a_rev / blended.a_spend : null;
+
+    const kpis = [
+      kpiCard('MTD Spend', fmtAUD(blended.a_spend), `target ${fmtAUD(blended.t_spend)} · pace ${f10PaceFmt(blended.p_spend)} ${f10PaceBadge(blended.p_spend, 'spend')}`),
+      kpiCard('MTD Revenue', fmtAUD(blended.a_rev), `target ${fmtAUD(blended.t_rev)} · pace ${f10PaceFmt(blended.p_rev)} ${f10PaceBadge(blended.p_rev, 'revenue')}`),
+      kpiCard('Blended ROAS', actualRoas ? actualRoas.toFixed(2) + 'x' : '—', `implied target ${impliedRoas ? impliedRoas.toFixed(2) + 'x' : '—'}`),
+    ].join('');
+
+    host.innerHTML = `
+      <div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>
+      <div class="kpi-grid">${kpis}</div>
+      <div class="table-card"><div class="table-card-header">Pacing by platform — ${monthLabel}</div><div class="table-wrap" id="${id}-table"></div></div>
+      <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
+      <div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`;
+
+    const headers = [
+      { label: 'Platform' }, { label: 'MTD Spend', num: true }, { label: 'Spend Target', num: true },
+      { label: 'Exp. to date', num: true }, { label: 'Spend Pace', num: true }, { label: 'Spend' },
+      { label: 'MTD Revenue', num: true }, { label: 'Rev Target', num: true }, { label: 'Rev Pace', num: true }, { label: 'Revenue' },
+    ];
+    const tableRows = [...rows, blended].map(r => [
+      r.channel, fmtAUDFull(r.a_spend), fmtAUDFull(r.t_spend), fmtAUDFull(r.e_spend), f10PaceFmt(r.p_spend), f10PaceBadge(r.p_spend, 'spend'),
+      fmtAUDFull(r.a_rev), fmtAUDFull(r.t_rev), f10PaceFmt(r.p_rev), f10PaceBadge(r.p_rev, 'revenue'),
+    ]);
+    buildTable(id + '-table', headers, tableRows);
+
+    f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);
+    f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev);
+  }
+
+  return {
+    id,
+    group: cfg.group || 'Pacing',
+    navLabel: cfg.navLabel || 'Pacing',
+    dot: cfg.dot || '#4b000f',
+    title: cfg.title || 'Pacing — this month',
+    sub: cfg.sub || 'Actuals vs target, prorated to date',
+    body: `<div id="${id}-body"></div>`,
+    load,
+  };
+}
