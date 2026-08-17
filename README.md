@@ -211,6 +211,52 @@ f10ToggleChart('cohort-trend', 'cohort-metrics', labels, [
 
 Chips use the `.metric-seg` style (a multi-select cousin of `.seg`).
 
+## Budget pacing tab
+
+### `f10PacingTab(cfg)`
+
+Returns a ready-made tab object (`{id, group, navLabel, title, sub, body, load}`)
+to spread into `config.tabs`. It shows month-to-date actuals against the
+full-month targets prorated by days elapsed — per platform and blended — with a
+status table (colour-coded pace badges) and two stacked through-the-month charts
+(cumulative actual vs a dashed target-pace line, for spend and revenue).
+
+It reads a governed BigQuery **targets table** plus the client's **actuals mart**,
+so it never touches the source sheet. Pair it with the `budget-pacing-targets`
+path in `f10-dataform` (which publishes `{client}_reporting.pacing_targets`).
+
+```js
+tabs: [
+  f10PacingTab({
+    targetsTable: 'mcc-poc-477801.pharmx_reporting.pacing_targets',
+    actuals: {
+      table: 'mcc-poc-477801.pharmx_marts.blended_campaign_daily',
+      dateField: 'date_start',   // date column
+      channelField: 'channel',   // channel column (values match platformMap)
+      spend: 'spend',            // spend column
+      revenue: 'revenue',        // revenue column
+    },
+    platformMap: { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn' },
+    revenueNote: 'Revenue is ad-attributed and lags spend on a longer attribution window.',
+  }),
+  // ...your other tabs
+]
+```
+
+| `cfg` field | Required | Notes |
+|---|---|---|
+| `targetsTable` | yes | Fully-qualified `{project}.{client}_reporting.pacing_targets`. |
+| `actuals.table` | yes | The mart the dashboard already reads for spend/revenue. |
+| `actuals.dateField` / `channelField` / `spend` / `revenue` | no | Column names; default `date_start` / `channel` / `spend` / `revenue`. |
+| `platformMap` | no | Maps targets platform codes (`gads`/`meta`/`linkedin`) to the mart's channel values. Default is the three above. |
+| `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
+| `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
+
+Targets are full-month figures; the tab prorates them
+(`expected_to_date = target * days_elapsed / days_in_month`). Spend and revenue
+pace independently, and over-pacing on spend reads as a caution (amber), not a
+win. Pace bands: below 0.9 behind/under, 0.9–1.1 on-track, above 1.1 ahead/over.
+
 ## Theming / branding
 
 All colours are CSS variables on `:root` in `f10-growth-shared.css`:
