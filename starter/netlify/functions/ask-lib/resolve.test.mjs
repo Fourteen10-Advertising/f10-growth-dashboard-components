@@ -115,6 +115,13 @@ test('viz spec maps onto the shared builders', () => {
   assert.equal(viz.dateRange.start, built.start);
 });
 
+test('an expression-based dimension (age band) groups by its CASE expression', () => {
+  const built = buildQuery(model, { source: 'age', metrics: ['spend', 'conversions'], dimension: 'age', viz: 'table' }, { today: TODAY });
+  assert.match(built.sql, /CASE WHEN age IN/);
+  assert.match(built.sql, /END AS dim/);
+  assert.match(built.sql, /GROUP BY dim/);
+});
+
 test('a time-series spec produces a bucketed, ordered query and a combo viz', () => {
   const spec = { source: 'blended', metrics: ['spend', 'conversions'], grain: 'week', viz: 'combo' };
   const built = buildQuery(model, spec, { today: TODAY });

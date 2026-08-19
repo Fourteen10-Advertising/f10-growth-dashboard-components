@@ -2,9 +2,19 @@
   "client": "fastcover",
   "project": "mcc-poc-477801",
   "location": "australia-southeast1",
-  "datasets": ["fastcover_marts", "fastcover_reporting"],
-  "dateGrains": ["day", "week", "month"],
-  "limits": { "defaultRows": 100, "maxRows": 1000 },
+  "datasets": [
+    "fastcover_marts",
+    "fastcover_reporting"
+  ],
+  "dateGrains": [
+    "day",
+    "week",
+    "month"
+  ],
+  "limits": {
+    "defaultRows": 100,
+    "maxRows": 1000
+  },
   "notes": "Seeded from the FastCover standing growth dashboard (index.html) so curated answers reconcile with the report. Revenue and ROAS are FastCover's directional in-platform lens, not audited business revenue (policy fourteen10-fastcover-in-platform-revenue-lens-directional). The blended rollup excludes Bing; the age source includes it.",
   "sources": {
     "blended": {
@@ -12,34 +22,110 @@
       "table": "fastcover_reporting.rollup_platform_daily",
       "dateColumn": "date",
       "notes": "Cross-platform daily rollup. Excludes Bing. Revenue is directional in-platform.",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "platform": { "column": "platform", "label": "Platform" }
+        "platform": {
+          "column": "platform",
+          "label": "Platform",
+          "options": [
+            "bing",
+            "gads",
+            "meta",
+            "tiktok"
+          ]
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
-        "conversions": { "label": "Conversions", "sql": "SUM(primary_conversions)", "format": "count" },
-        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))", "format": "money", "invert": true },
-        "revenue": { "label": "Revenue", "sql": "SUM(revenue)", "format": "money", "note": "directional in-platform" },
-        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))", "format": "roas", "note": "directional in-platform" }
+        "spend": {
+          "label": "Spend",
+          "sql": "SUM(spend)",
+          "format": "money"
+        },
+        "conversions": {
+          "label": "Conversions",
+          "sql": "SUM(primary_conversions)",
+          "format": "count"
+        },
+        "cpa": {
+          "label": "CPA",
+          "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))",
+          "format": "money",
+          "invert": true
+        },
+        "revenue": {
+          "label": "Revenue",
+          "sql": "SUM(revenue)",
+          "format": "money",
+          "note": "directional in-platform"
+        },
+        "roas": {
+          "label": "ROAS",
+          "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))",
+          "format": "roas",
+          "note": "directional in-platform"
+        }
       }
     },
     "google": {
       "label": "Google Ads",
       "table": "fastcover_marts.gads_campaign_daily",
       "dateColumn": "date_start",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "group": { "column": "group_name", "label": "Campaign Group", "options": ["Brand", "Competitor", "Demand Gen", "Display", "Generic", "Insurance Type", "Location", "Youtube"] }
+        "group": {
+          "column": "group_name",
+          "label": "Campaign Group",
+          "options": [
+            "Brand",
+            "Competitor",
+            "Demand Gen",
+            "Display",
+            "Generic",
+            "Insurance Type",
+            "Location",
+            "Youtube"
+          ]
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
-        "conversions": { "label": "Conversions", "sql": "SUM(conversions)", "format": "count" },
-        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))", "format": "money", "invert": true },
-        "revenue": { "label": "Revenue", "sql": "SUM(conversion_value)", "format": "money", "note": "directional in-platform" },
-        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(conversion_value), SUM(spend))", "format": "roas", "note": "directional in-platform" }
+        "spend": {
+          "label": "Spend",
+          "sql": "SUM(spend)",
+          "format": "money"
+        },
+        "conversions": {
+          "label": "Conversions",
+          "sql": "SUM(conversions)",
+          "format": "count"
+        },
+        "cpa": {
+          "label": "CPA",
+          "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))",
+          "format": "money",
+          "invert": true
+        },
+        "revenue": {
+          "label": "Revenue",
+          "sql": "SUM(conversion_value)",
+          "format": "money",
+          "note": "directional in-platform"
+        },
+        "roas": {
+          "label": "ROAS",
+          "sql": "SAFE_DIVIDE(SUM(conversion_value), SUM(spend))",
+          "format": "roas",
+          "note": "directional in-platform"
+        }
       }
     },
     "google_impression_share": {
@@ -47,15 +133,46 @@
       "table": "fastcover_marts.gads_impression_share",
       "dateColumn": "date_start",
       "notes": "Impression-weighted shares. Values are 0-1 fractions.",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "group": { "column": "group_name", "label": "Campaign Group" }
+        "group": {
+          "column": "group_name",
+          "label": "Campaign Group",
+          "options": [
+            "Brand",
+            "Competitor",
+            "Demand Gen",
+            "Display",
+            "Generic",
+            "Insurance Type",
+            "Location",
+            "Youtube"
+          ]
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "impression_share": { "label": "Search Impression Share", "sql": "SAFE_DIVIDE(SUM(search_impression_share * impressions), SUM(impressions))", "format": "fraction" },
-        "lost_to_budget": { "label": "Lost to Budget", "sql": "SAFE_DIVIDE(SUM(search_budget_lost_impression_share * impressions), SUM(impressions))", "format": "fraction", "invert": true },
-        "lost_to_rank": { "label": "Lost to Rank", "sql": "SAFE_DIVIDE(SUM(search_rank_lost_impression_share * impressions), SUM(impressions))", "format": "fraction", "invert": true }
+        "impression_share": {
+          "label": "Search Impression Share",
+          "sql": "SAFE_DIVIDE(SUM(search_impression_share * impressions), SUM(impressions))",
+          "format": "fraction"
+        },
+        "lost_to_budget": {
+          "label": "Lost to Budget",
+          "sql": "SAFE_DIVIDE(SUM(search_budget_lost_impression_share * impressions), SUM(impressions))",
+          "format": "fraction",
+          "invert": true
+        },
+        "lost_to_rank": {
+          "label": "Lost to Rank",
+          "sql": "SAFE_DIVIDE(SUM(search_rank_lost_impression_share * impressions), SUM(impressions))",
+          "format": "fraction",
+          "invert": true
+        }
       }
     },
     "meta": {
@@ -63,16 +180,40 @@
       "table": "fastcover_marts.meta_campaign_daily",
       "dateColumn": "date_start",
       "notes": "Standing dashboard reports spend, purchases, CPA and quotes. Purchase revenue exists in the warehouse but is heavily view-through and is not surfaced as a standing metric.",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "campaign": { "column": "campaign_name", "label": "Campaign" }
+        "campaign": {
+          "column": "campaign_name",
+          "label": "Campaign"
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
-        "purchases": { "label": "Purchases", "sql": "SUM(purchase)", "format": "count" },
-        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(purchase))", "format": "money", "invert": true },
-        "quotes": { "label": "Quotes", "sql": "SUM(quote)", "format": "count" }
+        "spend": {
+          "label": "Spend",
+          "sql": "SUM(spend)",
+          "format": "money"
+        },
+        "purchases": {
+          "label": "Purchases",
+          "sql": "SUM(purchase)",
+          "format": "count"
+        },
+        "cpa": {
+          "label": "CPA",
+          "sql": "SAFE_DIVIDE(SUM(spend), SUM(purchase))",
+          "format": "money",
+          "invert": true
+        },
+        "quotes": {
+          "label": "Quotes",
+          "sql": "SUM(quote)",
+          "format": "count"
+        }
       }
     },
     "tiktok": {
@@ -80,29 +221,80 @@
       "table": "fastcover_marts.tiktok_campaign_daily",
       "dateColumn": "date_start",
       "notes": "Revenue is not populated for TikTok in the standing dashboard; CPA only.",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "campaign": { "column": "campaign_name", "label": "Campaign" }
+        "campaign": {
+          "column": "campaign_name",
+          "label": "Campaign",
+          "options": [
+            "260210_Social_Purchases_Channel-Test_Prospecting_All",
+            "260526_Social_Purchases_CPA-G_Prospecting_All",
+            "260528_Social_Purchases_CPA-G_Prospecting_All_Smart+",
+            "260606_Social_Purchases_CPA-G_Prospecting_All_Smart+",
+            "260617_Social_Purchases_CPA-G_Prospecting_All_Smart+_LC",
+            "260817_Social_Purchases_NSWOnly_Prospecting_All_Smart+_LC"
+          ]
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
-        "conversions": { "label": "Conversions", "sql": "SUM(conversions)", "format": "count" },
-        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))", "format": "money", "invert": true }
+        "spend": {
+          "label": "Spend",
+          "sql": "SUM(spend)",
+          "format": "money"
+        },
+        "conversions": {
+          "label": "Conversions",
+          "sql": "SUM(conversions)",
+          "format": "count"
+        },
+        "cpa": {
+          "label": "CPA",
+          "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))",
+          "format": "money",
+          "invert": true
+        }
       }
     },
     "ga4_sessions": {
       "label": "GA4 Sessions",
       "table": "fastcover_marts.ga4_sessions_daily",
       "dateColumn": "date",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "channel": { "column": "channel", "label": "Channel", "options": ["direct", "google", "meta", "organic", "other", "tiktok"] }
+        "channel": {
+          "column": "channel",
+          "label": "Channel",
+          "options": [
+            "direct",
+            "google",
+            "meta",
+            "organic",
+            "other",
+            "tiktok"
+          ]
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "sessions": { "label": "Sessions", "sql": "SUM(sessions)", "format": "count" },
-        "users": { "label": "Users", "sql": "SUM(users)", "format": "count" }
+        "sessions": {
+          "label": "Sessions",
+          "sql": "SUM(sessions)",
+          "format": "count"
+        },
+        "users": {
+          "label": "Users",
+          "sql": "SUM(users)",
+          "format": "count"
+        }
       }
     },
     "ga4_transactions": {
@@ -110,82 +302,1835 @@
       "table": "fastcover_marts.ga4_events_daily",
       "dateColumn": "date",
       "notes": "Transactions come from the events table filtered to event_name='transactions'. This default filter is always applied.",
-      "grains": ["day", "week", "month"],
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "channel": { "column": "channel", "label": "Channel" }
+        "channel": {
+          "column": "channel",
+          "label": "Channel",
+          "options": [
+            "direct",
+            "google",
+            "meta",
+            "organic",
+            "other",
+            "tiktok"
+          ]
+        }
       },
       "defaultFilters": [
-        { "dimension": "event_name", "column": "event_name", "value": "transactions" }
+        {
+          "dimension": "event_name",
+          "column": "event_name",
+          "value": "transactions"
+        }
       ],
       "metrics": {
-        "transactions": { "label": "Transactions", "sql": "SUM(event_count)", "format": "count" }
+        "transactions": {
+          "label": "Transactions",
+          "sql": "SUM(event_count)",
+          "format": "count"
+        }
       }
     },
     "age": {
       "label": "Age performance",
       "table": "fastcover_marts.age_gender_daily",
       "dateColumn": "date",
-      "notes": "Totals by age source. Includes Bing. The exact consolidated age-band split (with the 45-54 half-split) is a curated view that stays in the standing dashboard; the Ask tab answers age totals and per-platform age performance accurately, and defers exact band splits to the standing report.",
-      "grains": ["day", "week", "month"],
+      "notes": "Age performance source. Includes Bing. Break down by the `age` dimension (consolidated bands) or by platform. The band mapping here is a close approximation of the standing Age tab, which splits 45-54 and 55-100 half-and-half across adjacent bands; here they fall wholly into 50-64, so band totals differ slightly from the standing report.",
+      "grains": [
+        "day",
+        "week",
+        "month"
+      ],
       "dimensions": {
-        "platform": { "column": "platform", "label": "Platform", "options": ["meta", "gads", "tiktok", "bing"] }
+        "platform": {
+          "column": "platform",
+          "label": "Platform",
+          "options": [
+            "bing",
+            "gads",
+            "meta",
+            "tiktok"
+          ]
+        },
+        "age": {
+          "column": "age",
+          "label": "Age band",
+          "sql": "CASE WHEN age IN ('18-24','25-34','AGE_18_24','AGE_25_34') THEN '18-34' WHEN age IN ('35-44','AGE_35_44','35-49') THEN '35-49' WHEN age IN ('45-54','AGE_45_54','55-64','50-64','AGE_55_100') THEN '50-64' WHEN age = '65+' THEN '65+' ELSE 'Unknown' END",
+          "options": [
+            "18-34",
+            "35-49",
+            "50-64",
+            "65+",
+            "Unknown"
+          ],
+          "note": "Consolidated bands; group-only. Approximation of the standing tab's half-split for 45-54 and 55-100 (here wholly in 50-64)."
+        }
       },
       "defaultFilters": [],
       "metrics": {
-        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
-        "conversions": { "label": "Conversions", "sql": "SUM(primary_conversions)", "format": "count" },
-        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))", "format": "money", "invert": true },
-        "revenue": { "label": "Revenue", "sql": "SUM(revenue)", "format": "money", "note": "directional in-platform" },
-        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))", "format": "roas", "note": "directional in-platform" },
-        "net_profit": { "label": "Net Profit (est.)", "sql": "ROUND(0.33 * (SUM(revenue) - SUM(spend)), 2)", "format": "money", "note": "estimate at a 0.33 margin assumption" }
+        "spend": {
+          "label": "Spend",
+          "sql": "SUM(spend)",
+          "format": "money"
+        },
+        "conversions": {
+          "label": "Conversions",
+          "sql": "SUM(primary_conversions)",
+          "format": "count"
+        },
+        "cpa": {
+          "label": "CPA",
+          "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))",
+          "format": "money",
+          "invert": true
+        },
+        "revenue": {
+          "label": "Revenue",
+          "sql": "SUM(revenue)",
+          "format": "money",
+          "note": "directional in-platform"
+        },
+        "roas": {
+          "label": "ROAS",
+          "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))",
+          "format": "roas",
+          "note": "directional in-platform"
+        },
+        "net_profit": {
+          "label": "Net Profit (est.)",
+          "sql": "ROUND(0.33 * (SUM(revenue) - SUM(spend)), 2)",
+          "format": "money",
+          "note": "estimate at a 0.33 margin assumption"
+        }
       }
     }
   },
   "questions": [
     {
       "id": "blended_spend_by_platform",
-      "match": ["spend by platform", "platform spend", "how much did we spend on each", "spend per channel", "spend by channel"],
-      "spec": { "source": "blended", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "dimension": "platform", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+      "match": [
+        "spend by platform",
+        "platform spend",
+        "how much did we spend on each",
+        "spend per channel",
+        "spend by channel"
+      ],
+      "spec": {
+        "source": "blended",
+        "metrics": [
+          "spend",
+          "conversions",
+          "cpa",
+          "revenue",
+          "roas"
+        ],
+        "dimension": "platform",
+        "viz": "table",
+        "orderBy": {
+          "metric": "spend",
+          "dir": "desc"
+        }
+      }
     },
     {
       "id": "blended_headline",
-      "match": ["how are we doing", "overall performance", "blended headline", "total spend and conversions", "headline numbers"],
-      "spec": { "source": "blended", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "viz": "kpi" }
+      "match": [
+        "how are we doing",
+        "overall performance",
+        "blended headline",
+        "total spend and conversions",
+        "headline numbers"
+      ],
+      "spec": {
+        "source": "blended",
+        "metrics": [
+          "spend",
+          "conversions",
+          "cpa",
+          "revenue",
+          "roas"
+        ],
+        "viz": "kpi"
+      }
     },
     {
       "id": "blended_spend_over_time",
-      "match": ["spend over time", "spend trend", "spend by week", "weekly spend"],
-      "spec": { "source": "blended", "metrics": ["spend", "conversions"], "grain": "week", "viz": "combo" }
+      "match": [
+        "spend over time",
+        "spend trend",
+        "spend by week",
+        "weekly spend"
+      ],
+      "spec": {
+        "source": "blended",
+        "metrics": [
+          "spend",
+          "conversions"
+        ],
+        "grain": "week",
+        "viz": "combo"
+      }
     },
     {
       "id": "google_by_group",
-      "match": ["google by group", "google ads by campaign group", "google campaign groups", "adwords by group"],
-      "spec": { "source": "google", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "dimension": "group", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+      "match": [
+        "google by group",
+        "google ads by campaign group",
+        "google campaign groups",
+        "adwords by group"
+      ],
+      "spec": {
+        "source": "google",
+        "metrics": [
+          "spend",
+          "conversions",
+          "cpa",
+          "revenue",
+          "roas"
+        ],
+        "dimension": "group",
+        "viz": "table",
+        "orderBy": {
+          "metric": "spend",
+          "dir": "desc"
+        }
+      }
     },
     {
       "id": "google_impression_share",
-      "match": ["impression share", "search impression share", "where are we losing impression share"],
-      "spec": { "source": "google_impression_share", "metrics": ["impression_share", "lost_to_budget", "lost_to_rank"], "dimension": "group", "viz": "table", "orderBy": { "metric": "impression_share", "dir": "desc" } }
+      "match": [
+        "impression share",
+        "search impression share",
+        "where are we losing impression share"
+      ],
+      "spec": {
+        "source": "google_impression_share",
+        "metrics": [
+          "impression_share",
+          "lost_to_budget",
+          "lost_to_rank"
+        ],
+        "dimension": "group",
+        "viz": "table",
+        "orderBy": {
+          "metric": "impression_share",
+          "dir": "desc"
+        }
+      }
     },
     {
       "id": "meta_top_campaigns",
-      "match": ["top meta campaigns", "best meta campaigns", "meta by campaign", "facebook campaigns"],
-      "spec": { "source": "meta", "metrics": ["spend", "purchases", "cpa", "quotes"], "dimension": "campaign", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" }, "limit": 20 }
+      "match": [
+        "top meta campaigns",
+        "best meta campaigns",
+        "meta by campaign",
+        "facebook campaigns"
+      ],
+      "spec": {
+        "source": "meta",
+        "metrics": [
+          "spend",
+          "purchases",
+          "cpa",
+          "quotes"
+        ],
+        "dimension": "campaign",
+        "viz": "table",
+        "orderBy": {
+          "metric": "spend",
+          "dir": "desc"
+        },
+        "limit": 20
+      }
     },
     {
       "id": "tiktok_performance",
-      "match": ["tiktok performance", "how is tiktok doing", "tiktok spend and conversions"],
-      "spec": { "source": "tiktok", "metrics": ["spend", "conversions", "cpa"], "viz": "kpi" }
+      "match": [
+        "tiktok performance",
+        "how is tiktok doing",
+        "tiktok spend and conversions"
+      ],
+      "spec": {
+        "source": "tiktok",
+        "metrics": [
+          "spend",
+          "conversions",
+          "cpa"
+        ],
+        "viz": "kpi"
+      }
     },
     {
       "id": "ga4_sessions_by_channel",
-      "match": ["sessions by channel", "ga4 by channel", "website sessions", "traffic by channel"],
-      "spec": { "source": "ga4_sessions", "metrics": ["sessions", "users"], "dimension": "channel", "viz": "table", "orderBy": { "metric": "sessions", "dir": "desc" } }
+      "match": [
+        "sessions by channel",
+        "ga4 by channel",
+        "website sessions",
+        "traffic by channel"
+      ],
+      "spec": {
+        "source": "ga4_sessions",
+        "metrics": [
+          "sessions",
+          "users"
+        ],
+        "dimension": "channel",
+        "viz": "table",
+        "orderBy": {
+          "metric": "sessions",
+          "dir": "desc"
+        }
+      }
     },
     {
       "id": "age_breakdown",
-      "match": ["performance by age", "age breakdown", "which age groups", "spend by age"],
-      "spec": { "source": "age", "metrics": ["spend", "conversions", "cpa", "revenue", "roas", "net_profit"], "dimension": "platform", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+      "match": [
+        "performance by age",
+        "age breakdown",
+        "which age groups",
+        "spend by age",
+        "by age band",
+        "age band"
+      ],
+      "spec": {
+        "source": "age",
+        "metrics": [
+          "spend",
+          "conversions",
+          "cpa",
+          "revenue",
+          "roas",
+          "net_profit"
+        ],
+        "dimension": "age",
+        "viz": "table",
+        "orderBy": {
+          "metric": "spend",
+          "dir": "desc"
+        }
+      }
     }
-  ]
+  ],
+  "warehouse": {
+    "generatedAt": "2026-08-19T05:22:13.148Z",
+    "tables": {
+      "fastcover_marts.age_gender_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "platform",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "age",
+            "type": "STRING"
+          },
+          {
+            "name": "gender",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_group",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "primary_conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "primary_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.component_performance": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "component",
+            "type": "STRING"
+          },
+          {
+            "name": "component_value",
+            "type": "STRING"
+          },
+          {
+            "name": "asset_count",
+            "type": "INT64"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "metric_type",
+            "type": "STRING"
+          },
+          {
+            "name": "cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "metric",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "baseline_metric",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "lift",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "metric_ci_low",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "metric_ci_high",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "confidence_tier",
+            "type": "STRING"
+          },
+          {
+            "name": "co_occurrence_flag",
+            "type": "BOOL"
+          },
+          {
+            "name": "label",
+            "type": "STRING"
+          },
+          {
+            "name": "evidence_window_months",
+            "type": "INT64"
+          }
+        ]
+      },
+      "fastcover_marts.component_variant_performance": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_id",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_name",
+            "type": "STRING"
+          },
+          {
+            "name": "account_id",
+            "type": "STRING"
+          },
+          {
+            "name": "attribution_status",
+            "type": "STRING"
+          },
+          {
+            "name": "brief_id",
+            "type": "STRING"
+          },
+          {
+            "name": "carried_components",
+            "type": "ARRAY<STRING>"
+          },
+          {
+            "name": "manifest_asset_id",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "delivery_start",
+            "type": "DATE"
+          },
+          {
+            "name": "delivery_end",
+            "type": "DATE"
+          },
+          {
+            "name": "metric_type",
+            "type": "STRING"
+          },
+          {
+            "name": "cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "metric",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "baseline_metric",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "lift",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "verdict",
+            "type": "STRING"
+          },
+          {
+            "name": "production_time_delta_hours",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "label",
+            "type": "STRING"
+          },
+          {
+            "name": "measurement_window_days",
+            "type": "INT64"
+          }
+        ]
+      },
+      "fastcover_marts.creative_age_reporting": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "ad_id",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_name",
+            "type": "STRING"
+          },
+          {
+            "name": "age_bracket",
+            "type": "STRING"
+          },
+          {
+            "name": "creative_link",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "quote",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "purchase_cpa",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.creative_reporting": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "country",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_id",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "adset_id",
+            "type": "STRING"
+          },
+          {
+            "name": "adset_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_id",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "landing_page_views",
+            "type": "INT64"
+          },
+          {
+            "name": "video_plays",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_15s",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_p25",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_p50",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_p75",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_p100",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_time_watched",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "outbound_clicks",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "inline_post_engagement",
+            "type": "INT64"
+          },
+          {
+            "name": "creative_link",
+            "type": "STRING"
+          },
+          {
+            "name": "effective_status",
+            "type": "STRING"
+          },
+          {
+            "name": "is_active",
+            "type": "BOOL"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "quote",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "min_date",
+            "type": "DATE"
+          },
+          {
+            "name": "max_date",
+            "type": "DATE"
+          },
+          {
+            "name": "lifetime_spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "lifetime_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "creative_age",
+            "type": "STRING"
+          }
+        ]
+      },
+      "fastcover_marts.ga4_events_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "source_medium",
+            "type": "STRING"
+          },
+          {
+            "name": "channel",
+            "type": "STRING"
+          },
+          {
+            "name": "event_name",
+            "type": "STRING"
+          },
+          {
+            "name": "event_count",
+            "type": "INT64"
+          }
+        ]
+      },
+      "fastcover_marts.ga4_landing_page_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "landing_page",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign",
+            "type": "STRING"
+          },
+          {
+            "name": "channel",
+            "type": "STRING"
+          },
+          {
+            "name": "source_medium",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "sessions",
+            "type": "INT64"
+          },
+          {
+            "name": "engaged_sessions",
+            "type": "INT64"
+          },
+          {
+            "name": "sign_ups",
+            "type": "INT64"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "clicks",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.ga4_landing_page_variant_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "landing_page",
+            "type": "STRING"
+          },
+          {
+            "name": "channel",
+            "type": "STRING"
+          },
+          {
+            "name": "info",
+            "type": "STRING"
+          },
+          {
+            "name": "menu",
+            "type": "STRING"
+          },
+          {
+            "name": "banner",
+            "type": "STRING"
+          },
+          {
+            "name": "sessions",
+            "type": "INT64"
+          },
+          {
+            "name": "engaged_sessions",
+            "type": "INT64"
+          },
+          {
+            "name": "sign_ups",
+            "type": "INT64"
+          }
+        ]
+      },
+      "fastcover_marts.ga4_sessions_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "source_medium",
+            "type": "STRING"
+          },
+          {
+            "name": "channel",
+            "type": "STRING"
+          },
+          {
+            "name": "sessions",
+            "type": "INT64"
+          },
+          {
+            "name": "users",
+            "type": "INT64"
+          }
+        ]
+      },
+      "fastcover_marts.gads_campaign_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversion_value",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "named_revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.gads_impression_share": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "customer_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "search_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_absolute_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_click_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_budget_lost_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_rank_lost_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "content_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "eligible_search_impressions",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.gads_keyword_impression_share": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "customer_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_group_id",
+            "type": "INT64"
+          },
+          {
+            "name": "ad_group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "criterion_id",
+            "type": "INT64"
+          },
+          {
+            "name": "keyword_text",
+            "type": "STRING"
+          },
+          {
+            "name": "match_type",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "search_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_rank_lost_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_rank_lost_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_rank_lost_absolute_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_absolute_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "eligible_search_impressions",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.gads_keyword_quality": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "customer_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_group_id",
+            "type": "INT64"
+          },
+          {
+            "name": "ad_group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "criterion_id",
+            "type": "INT64"
+          },
+          {
+            "name": "keyword_text",
+            "type": "STRING"
+          },
+          {
+            "name": "match_type",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "quality_score",
+            "type": "INT64"
+          },
+          {
+            "name": "ad_relevance",
+            "type": "STRING"
+          },
+          {
+            "name": "landing_page_experience",
+            "type": "STRING"
+          },
+          {
+            "name": "expected_ctr",
+            "type": "STRING"
+          }
+        ]
+      },
+      "fastcover_marts.gads_keywords_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_group_id",
+            "type": "INT64"
+          },
+          {
+            "name": "ad_group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "criterion_id",
+            "type": "INT64"
+          },
+          {
+            "name": "keyword_text",
+            "type": "STRING"
+          },
+          {
+            "name": "match_type",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversion_value",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "named_revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.gads_search_terms_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "campaign_id",
+            "type": "INT64"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "search_term",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversion_value",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "named_revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.meta_campaign_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "country",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "campaign_id",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "stream",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_type",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "landing_page_views",
+            "type": "INT64"
+          },
+          {
+            "name": "purchase",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "quote",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.tiktok_campaign_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "campaign_id",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversion_value",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_marts.tiktok_creative_reporting": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "country",
+            "type": "STRING"
+          },
+          {
+            "name": "date_start",
+            "type": "DATE"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_id",
+            "type": "STRING"
+          },
+          {
+            "name": "campaign_name",
+            "type": "STRING"
+          },
+          {
+            "name": "adgroup_name",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_id",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_name",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "conversion_value",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "video_watched_2s",
+            "type": "INT64"
+          },
+          {
+            "name": "video_watched_6s",
+            "type": "INT64"
+          },
+          {
+            "name": "video_views_p25",
+            "type": "INT64"
+          },
+          {
+            "name": "video_views_p50",
+            "type": "INT64"
+          },
+          {
+            "name": "video_views_p75",
+            "type": "INT64"
+          },
+          {
+            "name": "video_views_p100",
+            "type": "INT64"
+          },
+          {
+            "name": "video_play_actions",
+            "type": "INT64"
+          },
+          {
+            "name": "average_video_play",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "engagements",
+            "type": "INT64"
+          },
+          {
+            "name": "likes",
+            "type": "INT64"
+          },
+          {
+            "name": "comments",
+            "type": "INT64"
+          },
+          {
+            "name": "shares",
+            "type": "INT64"
+          },
+          {
+            "name": "follows",
+            "type": "INT64"
+          },
+          {
+            "name": "profile_visits",
+            "type": "INT64"
+          },
+          {
+            "name": "creative_link",
+            "type": "STRING"
+          },
+          {
+            "name": "video_url",
+            "type": "STRING"
+          },
+          {
+            "name": "video_cover_url",
+            "type": "STRING"
+          },
+          {
+            "name": "image_url",
+            "type": "STRING"
+          },
+          {
+            "name": "ad_format",
+            "type": "STRING"
+          },
+          {
+            "name": "min_date",
+            "type": "DATE"
+          },
+          {
+            "name": "max_date",
+            "type": "DATE"
+          },
+          {
+            "name": "lifetime_spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "lifetime_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "creative_age",
+            "type": "STRING"
+          }
+        ]
+      },
+      "fastcover_reporting.gads_impression_share_account": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "customer_id",
+            "type": "INT64"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "eligible_search_impressions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "received_search_impressions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_budget_lost_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_rank_lost_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_absolute_top_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "content_impression_share",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "search_click_share",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_reporting.pacing_targets": {
+        "columns": [
+          {
+            "name": "month",
+            "type": "DATE"
+          },
+          {
+            "name": "platform",
+            "type": "STRING"
+          },
+          {
+            "name": "group_name",
+            "type": "STRING"
+          },
+          {
+            "name": "target_spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "target_revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_reporting.rollup_age_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "age",
+            "type": "STRING"
+          },
+          {
+            "name": "age_band",
+            "type": "STRING"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "primary_conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "primary_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_reporting.rollup_conversions_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "platform",
+            "type": "STRING"
+          },
+          {
+            "name": "conversion_event",
+            "type": "STRING"
+          },
+          {
+            "name": "conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_reporting.rollup_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "primary_conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "primary_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          }
+        ]
+      },
+      "fastcover_reporting.rollup_platform_daily": {
+        "columns": [
+          {
+            "name": "client",
+            "type": "STRING"
+          },
+          {
+            "name": "currency",
+            "type": "STRING"
+          },
+          {
+            "name": "platform",
+            "type": "STRING"
+          },
+          {
+            "name": "date",
+            "type": "DATE"
+          },
+          {
+            "name": "spend",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "impressions",
+            "type": "INT64"
+          },
+          {
+            "name": "clicks",
+            "type": "INT64"
+          },
+          {
+            "name": "primary_conversions",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "revenue",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "primary_cpa",
+            "type": "FLOAT64"
+          },
+          {
+            "name": "roas",
+            "type": "FLOAT64"
+          }
+        ]
+      }
+    }
+  }
 }

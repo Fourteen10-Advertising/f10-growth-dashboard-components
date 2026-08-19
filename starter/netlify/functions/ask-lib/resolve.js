@@ -157,17 +157,20 @@ function clampLimit(limit, model) {
 
 function filterClause(src, filter) {
   const dimId = filter.dimension;
-  // A filter may target a declared dimension, or an explicit column (used by defaultFilters
-  // such as GA4 event_name). Only a model-declared column can ever reach SQL.
-  let column = null, options = null;
-  if (src.dimensions && src.dimensions[dimId]) { column = src.dimensions[dimId].column; options = src.dimensions[dimId].options; }
-  else if (filter.column) column = filter.column;
-  if (!column) throw new Error(`filter targets unknown dimension/column: ${JSON.stringify(dimId || filter.column)}`);
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) throw new Error(`illegal column identifier: ${column}`);
+  // A filter may target a declared dimension (plain column or curated `sql`
+  // expression), or an explicit column (used by defaultFilters such as GA4
+  // event_name). Only model-declared expressions ever reach SQL.
+  let expr = null, options = null, isSql = false;
+  if (src.dimensions && src.dimensions[dimId]) {
+    const d = src.dimensions[dimId];
+    expr = d.sql || d.column; options = d.options; isSql = !!d.sql;
+  } else if (filter.column) { expr = filter.column; }
+  if (!expr) throw new Error(`filter targets unknown dimension/column: ${JSON.stringify(dimId || filter.column)}`);
+  if (!isSql && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(expr)) throw new Error(`illegal column identifier: ${expr}`);
   if (options && Array.isArray(options) && !options.includes(filter.value)) {
     throw new Error(`filter value "${filter.value}" not allowed for ${dimId} (allowed: ${options.join(', ')})`);
   }
-  return `${column} = '${sqlStr(filter.value)}'`;
+  return `${expr} = '${sqlStr(filter.value)}'`;
 }
 
 /**
@@ -200,9 +203,12 @@ function buildQuery(model, spec, opts = {}) {
   if (spec.dimension) {
     const dim = src.dimensions && src.dimensions[spec.dimension];
     if (!dim) throw new Error(`unknown dimension ${spec.dimension} for source ${spec.source}`);
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dim.column)) throw new Error(`illegal dimension column: ${dim.column}`);
+    // A dimension is either a plain column or a curated SQL expression (e.g. an
+    // age-band CASE). Plain columns are identifier-checked; curated `sql` is trusted.
+    const dimExpr = dim.sql ? dim.sql : dim.column;
+    if (!dim.sql && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(dim.column)) throw new Error(`illegal dimension column: ${dim.column}`);
     dimSelected = dim;
-    selects.push(`${dim.column} AS dim`);
+    selects.push(`${dimExpr} AS dim`);
   }
   metricIds.forEach(id => {
     const m = src.metrics[id];
