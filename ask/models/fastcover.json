@@ -1,0 +1,191 @@
+{
+  "client": "fastcover",
+  "project": "mcc-poc-477801",
+  "location": "australia-southeast1",
+  "datasets": ["fastcover_marts", "fastcover_reporting"],
+  "dateGrains": ["day", "week", "month"],
+  "limits": { "defaultRows": 100, "maxRows": 1000 },
+  "notes": "Seeded from the FastCover standing growth dashboard (index.html) so curated answers reconcile with the report. Revenue and ROAS are FastCover's directional in-platform lens, not audited business revenue (policy fourteen10-fastcover-in-platform-revenue-lens-directional). The blended rollup excludes Bing; the age source includes it.",
+  "sources": {
+    "blended": {
+      "label": "All Channels (blended)",
+      "table": "fastcover_reporting.rollup_platform_daily",
+      "dateColumn": "date",
+      "notes": "Cross-platform daily rollup. Excludes Bing. Revenue is directional in-platform.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "platform": { "column": "platform", "label": "Platform" }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
+        "conversions": { "label": "Conversions", "sql": "SUM(primary_conversions)", "format": "count" },
+        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))", "format": "money", "invert": true },
+        "revenue": { "label": "Revenue", "sql": "SUM(revenue)", "format": "money", "note": "directional in-platform" },
+        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))", "format": "roas", "note": "directional in-platform" }
+      }
+    },
+    "google": {
+      "label": "Google Ads",
+      "table": "fastcover_marts.gads_campaign_daily",
+      "dateColumn": "date_start",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "group": { "column": "group_name", "label": "Campaign Group", "options": ["Brand", "Competitor", "Demand Gen", "Display", "Generic", "Insurance Type", "Location", "Youtube"] }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
+        "conversions": { "label": "Conversions", "sql": "SUM(conversions)", "format": "count" },
+        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))", "format": "money", "invert": true },
+        "revenue": { "label": "Revenue", "sql": "SUM(conversion_value)", "format": "money", "note": "directional in-platform" },
+        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(conversion_value), SUM(spend))", "format": "roas", "note": "directional in-platform" }
+      }
+    },
+    "google_impression_share": {
+      "label": "Google Ads Impression Share",
+      "table": "fastcover_marts.gads_impression_share",
+      "dateColumn": "date_start",
+      "notes": "Impression-weighted shares. Values are 0-1 fractions.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "group": { "column": "group_name", "label": "Campaign Group" }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "impression_share": { "label": "Search Impression Share", "sql": "SAFE_DIVIDE(SUM(search_impression_share * impressions), SUM(impressions))", "format": "fraction" },
+        "lost_to_budget": { "label": "Lost to Budget", "sql": "SAFE_DIVIDE(SUM(search_budget_lost_impression_share * impressions), SUM(impressions))", "format": "fraction", "invert": true },
+        "lost_to_rank": { "label": "Lost to Rank", "sql": "SAFE_DIVIDE(SUM(search_rank_lost_impression_share * impressions), SUM(impressions))", "format": "fraction", "invert": true }
+      }
+    },
+    "meta": {
+      "label": "Meta",
+      "table": "fastcover_marts.meta_campaign_daily",
+      "dateColumn": "date_start",
+      "notes": "Standing dashboard reports spend, purchases, CPA and quotes. Purchase revenue exists in the warehouse but is heavily view-through and is not surfaced as a standing metric.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "campaign": { "column": "campaign_name", "label": "Campaign" }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
+        "purchases": { "label": "Purchases", "sql": "SUM(purchase)", "format": "count" },
+        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(purchase))", "format": "money", "invert": true },
+        "quotes": { "label": "Quotes", "sql": "SUM(quote)", "format": "count" }
+      }
+    },
+    "tiktok": {
+      "label": "TikTok",
+      "table": "fastcover_marts.tiktok_campaign_daily",
+      "dateColumn": "date_start",
+      "notes": "Revenue is not populated for TikTok in the standing dashboard; CPA only.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "campaign": { "column": "campaign_name", "label": "Campaign" }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
+        "conversions": { "label": "Conversions", "sql": "SUM(conversions)", "format": "count" },
+        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(conversions))", "format": "money", "invert": true }
+      }
+    },
+    "ga4_sessions": {
+      "label": "GA4 Sessions",
+      "table": "fastcover_marts.ga4_sessions_daily",
+      "dateColumn": "date",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "channel": { "column": "channel", "label": "Channel", "options": ["direct", "google", "meta", "organic", "other", "tiktok"] }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "sessions": { "label": "Sessions", "sql": "SUM(sessions)", "format": "count" },
+        "users": { "label": "Users", "sql": "SUM(users)", "format": "count" }
+      }
+    },
+    "ga4_transactions": {
+      "label": "GA4 Transactions",
+      "table": "fastcover_marts.ga4_events_daily",
+      "dateColumn": "date",
+      "notes": "Transactions come from the events table filtered to event_name='transactions'. This default filter is always applied.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "channel": { "column": "channel", "label": "Channel" }
+      },
+      "defaultFilters": [
+        { "dimension": "event_name", "column": "event_name", "value": "transactions" }
+      ],
+      "metrics": {
+        "transactions": { "label": "Transactions", "sql": "SUM(event_count)", "format": "count" }
+      }
+    },
+    "age": {
+      "label": "Age performance",
+      "table": "fastcover_marts.age_gender_daily",
+      "dateColumn": "date",
+      "notes": "Totals by age source. Includes Bing. The exact consolidated age-band split (with the 45-54 half-split) is a curated view that stays in the standing dashboard; the Ask tab answers age totals and per-platform age performance accurately, and defers exact band splits to the standing report.",
+      "grains": ["day", "week", "month"],
+      "dimensions": {
+        "platform": { "column": "platform", "label": "Platform", "options": ["meta", "gads", "tiktok", "bing"] }
+      },
+      "defaultFilters": [],
+      "metrics": {
+        "spend": { "label": "Spend", "sql": "SUM(spend)", "format": "money" },
+        "conversions": { "label": "Conversions", "sql": "SUM(primary_conversions)", "format": "count" },
+        "cpa": { "label": "CPA", "sql": "SAFE_DIVIDE(SUM(spend), SUM(primary_conversions))", "format": "money", "invert": true },
+        "revenue": { "label": "Revenue", "sql": "SUM(revenue)", "format": "money", "note": "directional in-platform" },
+        "roas": { "label": "ROAS", "sql": "SAFE_DIVIDE(SUM(revenue), SUM(spend))", "format": "roas", "note": "directional in-platform" },
+        "net_profit": { "label": "Net Profit (est.)", "sql": "ROUND(0.33 * (SUM(revenue) - SUM(spend)), 2)", "format": "money", "note": "estimate at a 0.33 margin assumption" }
+      }
+    }
+  },
+  "questions": [
+    {
+      "id": "blended_spend_by_platform",
+      "match": ["spend by platform", "platform spend", "how much did we spend on each", "spend per channel", "spend by channel"],
+      "spec": { "source": "blended", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "dimension": "platform", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+    },
+    {
+      "id": "blended_headline",
+      "match": ["how are we doing", "overall performance", "blended headline", "total spend and conversions", "headline numbers"],
+      "spec": { "source": "blended", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "viz": "kpi" }
+    },
+    {
+      "id": "blended_spend_over_time",
+      "match": ["spend over time", "spend trend", "spend by week", "weekly spend"],
+      "spec": { "source": "blended", "metrics": ["spend", "conversions"], "grain": "week", "viz": "combo" }
+    },
+    {
+      "id": "google_by_group",
+      "match": ["google by group", "google ads by campaign group", "google campaign groups", "adwords by group"],
+      "spec": { "source": "google", "metrics": ["spend", "conversions", "cpa", "revenue", "roas"], "dimension": "group", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+    },
+    {
+      "id": "google_impression_share",
+      "match": ["impression share", "search impression share", "where are we losing impression share"],
+      "spec": { "source": "google_impression_share", "metrics": ["impression_share", "lost_to_budget", "lost_to_rank"], "dimension": "group", "viz": "table", "orderBy": { "metric": "impression_share", "dir": "desc" } }
+    },
+    {
+      "id": "meta_top_campaigns",
+      "match": ["top meta campaigns", "best meta campaigns", "meta by campaign", "facebook campaigns"],
+      "spec": { "source": "meta", "metrics": ["spend", "purchases", "cpa", "quotes"], "dimension": "campaign", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" }, "limit": 20 }
+    },
+    {
+      "id": "tiktok_performance",
+      "match": ["tiktok performance", "how is tiktok doing", "tiktok spend and conversions"],
+      "spec": { "source": "tiktok", "metrics": ["spend", "conversions", "cpa"], "viz": "kpi" }
+    },
+    {
+      "id": "ga4_sessions_by_channel",
+      "match": ["sessions by channel", "ga4 by channel", "website sessions", "traffic by channel"],
+      "spec": { "source": "ga4_sessions", "metrics": ["sessions", "users"], "dimension": "channel", "viz": "table", "orderBy": { "metric": "sessions", "dir": "desc" } }
+    },
+    {
+      "id": "age_breakdown",
+      "match": ["performance by age", "age breakdown", "which age groups", "spend by age"],
+      "spec": { "source": "age", "metrics": ["spend", "conversions", "cpa", "revenue", "roas", "net_profit"], "dimension": "platform", "viz": "table", "orderBy": { "metric": "spend", "dir": "desc" } }
+    }
+  ]
+}
