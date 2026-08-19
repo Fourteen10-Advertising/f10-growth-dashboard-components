@@ -17,7 +17,7 @@
  *     (from the framework's ask/models/<client>.json).
  *   - Set GOOGLE_SERVICE_ACCOUNT to the client's SCOPED service account JSON.
  *   - Optional env: BQ_PROJECT_ID (default mcc-poc-477801),
- *     ASK_GEMINI_MODEL (default gemini-2.5-flash),
+ *     ASK_GEMINI_MODEL (default gemini-3.5-flash),
  *     ASK_LOCATION (default australia-southeast1),
  *     ALLOWED_ORIGIN (CORS lock, same as bq.js).
  */
@@ -33,7 +33,7 @@ const { makeLogger } = require('./ask-lib/log.js');
 
 const PROJECT = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
 const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1';
-const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-3.5-flash';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const LOG_TABLE = process.env.ASK_LOG_TABLE || ''; // e.g. dashboard_ops.dashboard_ai_log
 
