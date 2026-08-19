@@ -11,9 +11,22 @@ self-contained after the starter is copied.
 | `gemini.js` | Vertex AI Gemini client and prompt builders (spec mapping, text-to-SQL fallback, interpretation). |
 | `bq-client.js` | BigQuery REST client: token, dry-run (referenced tables + bytes), execute. |
 | `pipeline.js` | The hybrid resolution flow, with the guard at the single gate. Clients are injected. |
+| `github.js` | Server-side GitHub client for the "Add to my dashboard" flow (app JWT, installation token, issue create/dedup). |
+| `cache.js` / `ratelimit.js` / `log.js` | Cost and rate controls: TTL cache, per-site limiter, BigQuery question log. |
 | `models/<client>.json` | Semantic-model seeds kept in the framework for reference. |
 
-The Netlify handler is `../ask.js`.
+The Netlify handlers are `../ask.js` (answers) and `../ask-request.js` ("Add to
+my dashboard").
+
+## "Add to my dashboard" (ask-request.js) env
+
+- `GITHUB_REPO` — `owner/repo` of the client's dashboard repo (required).
+- Auth, one of: `GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` +
+  `GITHUB_APP_INSTALLATION_ID` (preferred, a GitHub App with issues:write), or a
+  fine-grained `GITHUB_TOKEN` with issues:write on the repo.
+- `GITHUB_ISSUE_LABEL` (default `ask-request`), `GITHUB_ISSUE_ASSIGNEE` (optional).
+- On the client dashboard, pass `requestFunction: '/.netlify/functions/ask-request'`
+  to `f10AskTab(cfg)` to show the action.
 
 ## Per-client wiring
 
