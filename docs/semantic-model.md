@@ -11,7 +11,8 @@ on:
    the rest of the dashboard.
 
 The curated resolver that turns a metric-spec into SQL and a viz-spec lives in
-`ask/resolve.js`. The FastCover pilot model is `ask/models/fastcover.json`, seeded
+`starter/netlify/functions/ask-lib/resolve.js`. The FastCover pilot model is
+`starter/netlify/functions/ask-lib/models/fastcover.json`, seeded
 from the standing FastCover dashboard so curated answers reconcile with the
 report.
 
@@ -149,7 +150,7 @@ dimension lands under `dim`, a time bucket under `bucket`, each metric under its
 id). The browser formats display values with the framework's `fmt*` helpers using
 each column's `format`.
 
-## Resolver API (`ask/resolve.js`)
+## Resolver API (`starter/netlify/functions/ask-lib/resolve.js`)
 
 - `buildQuery(model, spec, { today })` returns `{ sql, referencedTables, start, end, metricIds, dimId, grain, source }`. The SQL is a single SELECT, always LIMITed, scoped to the model's datasets. It throws on any unknown source, metric or dimension, and on a filter value outside the allowlist.
 - `buildVizSpec(model, spec, built, rows)` returns the viz-spec for the rows.
@@ -170,4 +171,5 @@ testable. The ask function passes the real date; the tests pass a fixed date.
    `{client}_reporting` datasets.
 4. Add a handful of `questions` entries that map the common phrasings for that
    client onto specs.
-5. Run `node --test ask/resolve.test.mjs` after adapting the fixtures.
+5. Run the tests after adapting the fixtures:
+   `node --test starter/netlify/functions/ask-lib/*.test.mjs`.
