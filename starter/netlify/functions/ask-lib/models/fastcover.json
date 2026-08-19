@@ -340,7 +340,7 @@
       "label": "Age performance",
       "table": "fastcover_marts.age_gender_daily",
       "dateColumn": "date",
-      "notes": "Age performance source. Includes Bing. Break down by the `age` dimension (consolidated bands) or by platform. The band mapping here is a close approximation of the standing Age tab, which splits 45-54 and 55-100 half-and-half across adjacent bands; here they fall wholly into 50-64, so band totals differ slightly from the standing report.",
+      "notes": "Age performance source. Includes Bing. Break down by the raw `age` values as they appear in the warehouse, or by platform. Age grouping is a data/marts concern, not hardcoded here, so the breakdown reflects whatever bands the client's data uses (which may differ from the standing Age tab's consolidated view). The age values are populated from the warehouse by the introspection step.",
       "grains": [
         "day",
         "week",
@@ -359,16 +359,27 @@
         },
         "age": {
           "column": "age",
-          "label": "Age band",
-          "sql": "CASE WHEN age IN ('18-24','25-34','AGE_18_24','AGE_25_34') THEN '18-34' WHEN age IN ('35-44','AGE_35_44','35-49') THEN '35-49' WHEN age IN ('45-54','AGE_45_54','55-64','50-64','AGE_55_100') THEN '50-64' WHEN age = '65+' THEN '65+' ELSE 'Unknown' END",
+          "label": "Age",
           "options": [
-            "18-34",
+            "0-12",
+            "13-17",
+            "18-24",
+            "25-34",
+            "35-44",
             "35-49",
+            "45-54",
             "50-64",
+            "55-64",
             "65+",
+            "AGE_13_17",
+            "AGE_18_24",
+            "AGE_25_34",
+            "AGE_35_44",
+            "AGE_45_54",
+            "AGE_55_100",
+            "NONE",
             "Unknown"
-          ],
-          "note": "Consolidated bands; group-only. Approximation of the standing tab's half-split for 45-54 and 55-100 (here wholly in 50-64)."
+          ]
         }
       },
       "defaultFilters": [],
@@ -617,7 +628,7 @@
     }
   ],
   "warehouse": {
-    "generatedAt": "2026-08-19T05:22:13.148Z",
+    "generatedAt": "2026-08-19T05:40:46.210Z",
     "tables": {
       "fastcover_marts.age_gender_daily": {
         "columns": [

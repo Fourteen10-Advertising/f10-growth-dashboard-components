@@ -205,8 +205,13 @@ Re-run it on a schedule (or when the warehouse schema changes) so the `warehouse
 section and dimension values track reality. The pure helpers live in
 `ask-lib/introspect.js` and are unit-tested.
 
-### Expression dimensions
+### Expression dimensions (opt-in)
 
-A dimension can be a plain `column` or a curated `sql` expression (for example the
-age-band `CASE`). Expression dimensions are trusted (not identifier-checked) and
-keep their curated `options`; the introspection step does not overwrite them.
+A dimension is normally a plain `column` whose values are read from the warehouse
+by the introspection step, so grouping reflects the data rather than a hardcoded
+rule. Age, for example, groups by the raw `age` values as they appear in the data;
+any consolidation into bands belongs upstream in the marts, not in this model, so
+each client's grouping is whatever their data uses. A dimension may optionally be a
+curated `sql` expression when a client genuinely needs a bespoke grouping the data
+cannot provide; expression dimensions are trusted (not identifier-checked) and keep
+their curated `options` rather than being sampled. Prefer plain columns.

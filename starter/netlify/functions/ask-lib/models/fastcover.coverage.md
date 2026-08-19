@@ -1,6 +1,6 @@
 # Semantic-model coverage: fastcover
 
-Generated: 2026-08-19T05:22:13.148Z. Datasets: fastcover_marts, fastcover_reporting.
+Generated: 2026-08-19T05:40:46.210Z. Datasets: fastcover_marts, fastcover_reporting.
 
 This report is advisory. Curated metrics stay accurate; the guarded
 text-to-SQL fallback can already reach the columns below. Promote the ones

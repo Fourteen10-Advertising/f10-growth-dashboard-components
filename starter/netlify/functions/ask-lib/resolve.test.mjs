@@ -115,11 +115,23 @@ test('viz spec maps onto the shared builders', () => {
   assert.equal(viz.dateRange.start, built.start);
 });
 
-test('an expression-based dimension (age band) groups by its CASE expression', () => {
+test('the age dimension reads the raw age column, not a hardcoded grouping', () => {
   const built = buildQuery(model, { source: 'age', metrics: ['spend', 'conversions'], dimension: 'age', viz: 'table' }, { today: TODAY });
+  assert.match(built.sql, /age AS dim/);
+  assert.doesNotMatch(built.sql, /CASE WHEN/);
+  assert.match(built.sql, /GROUP BY dim/);
+});
+
+test('an expression-based dimension (dim.sql) is still supported as an explicit opt-in', () => {
+  const m2 = {
+    client: 'x', project: 'mcc-poc-477801', datasets: ['fastcover_marts'],
+    sources: { s: { table: 'fastcover_marts.age_gender_daily', dateColumn: 'date',
+      dimensions: { band: { column: 'age', label: 'Band', sql: "CASE WHEN age IN ('18-24') THEN '18-34' ELSE 'Other' END" } },
+      metrics: { spend: { label: 'Spend', sql: 'SUM(spend)', format: 'money' } } } },
+  };
+  const built = buildQuery(m2, { source: 's', metrics: ['spend'], dimension: 'band' }, { today: TODAY });
   assert.match(built.sql, /CASE WHEN age IN/);
   assert.match(built.sql, /END AS dim/);
-  assert.match(built.sql, /GROUP BY dim/);
 });
 
 test('a time-series spec produces a bucketed, ordered query and a combo viz', () => {
