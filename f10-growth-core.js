@@ -540,6 +540,29 @@ function f10AskRenderResult(hostId, viz){
     return;
   }
 
+  if(t === 'pivot'){
+    // Breakdown over time: one line per dimension value across the buckets, for one metric.
+    const cid = hostId + '-cnv';
+    host.innerHTML = `<div class="chart-card"><div class="chart-card-title">${f10AskEscape(viz.title || 'Result')}</div><div class="chart-wrap"><canvas id="${cid}"></canvas></div></div>`;
+    const xKey = viz.x.key, pKey = viz.pivot.key, mKey = viz.metric.key;
+    const buckets = [...new Set((viz.rows || []).map(r => r[xKey]))].sort();
+    const groups = [...new Set((viz.rows || []).map(r => r[pKey]))];
+    const byKey = new Map((viz.rows || []).map(r => [r[xKey] + '|' + r[pKey], r]));
+    const datasets = groups.map((g, i) => ({
+      label: g == null ? '—' : String(g),
+      data: buckets.map(b => { const r = byKey.get(b + '|' + g); return r ? n(r[mKey]) : null; }),
+      borderColor: F10_ASK_PALETTE[i % F10_ASK_PALETTE.length],
+      backgroundColor: F10_ASK_PALETTE[i % F10_ASK_PALETTE.length],
+      tension: 0.25, fill: false, spanGaps: true,
+    }));
+    makeChart(cid, {
+      type: 'line',
+      data: { labels: buckets, datasets },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } } },
+    });
+    return;
+  }
+
   // line | bar | combo
   const cid = hostId + '-cnv';
   host.innerHTML = `<div class="chart-card"><div class="chart-card-title">${f10AskEscape(viz.title || 'Result')}</div><div class="chart-wrap"><canvas id="${cid}"></canvas></div></div>`;

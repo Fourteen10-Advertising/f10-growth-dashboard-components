@@ -20,16 +20,22 @@ const https = require('https');
 
 const CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
-/** Call Vertex AI generateContent. Returns the model's text output. */
+/** Call Vertex AI generateContent. Returns the model's text output.
+ * location may be a region (australia-southeast1) or 'global'; the global endpoint
+ * uses the bare aiplatform host and unlocks newer models not offered in-region. */
 async function generate(token, { project, location, model, system, prompt, json }) {
-  const host = `${location}-aiplatform.googleapis.com`;
+  const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
   const path = `/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
   const body = JSON.stringify({
     systemInstruction: system ? { parts: [{ text: system }] } : undefined,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 2048,
+      // These are structured, deterministic tasks (spec JSON / one SQL statement /
+      // a short interpretation). Disable model "thinking" so it does not leak
+      // reasoning into the output or burn the token budget and truncate the SQL.
+      thinkingConfig: { thinkingBudget: 0 },
       ...(json ? { responseMimeType: 'application/json' } : {}),
     },
   });
@@ -85,6 +91,7 @@ function buildSpecSystemPrompt(model, today) {
     `If the question does NOT name a time period, OMIT dateRange entirely so the dashboard's selected range is used.`,
     `To restrict to a specific dimension value (for example only Competitor campaigns, or only the Meta platform), add it to filters using the EXACT value shown in [values: ...] for that dimension.`,
     `Prefer a dimension breakdown as a table, a single-number question as kpi, and an over-time question as a combo chart.`,
+    `For a breakdown OVER TIME (for example "spend by age over weeks", "sessions by channel by month", "cpa by campaign group over time"), set BOTH a dimension AND a grain. That renders as one line per dimension value across the time buckets, so always prefer this to free SQL when the breakdown maps to a known dimension.`,
     `If it truly does not map to the catalogue, return {"curated": false, "reason": "<short reason>"}.`,
   ].filter(Boolean).join('\n');
 }
@@ -160,6 +167,7 @@ function buildInterpretationPrompt(question, vizSpec, rows) {
     ``,
     `Write two or three plain sentences interpreting this result for a non-technical client.`,
     `Use only the numbers in the rows. Do not invent figures. Do not use dashes; write plainly.`,
+    `Output ONLY those sentences: no preamble, no bullet points, no mention of these instructions or your reasoning.`,
   ].join('\n');
 }
 

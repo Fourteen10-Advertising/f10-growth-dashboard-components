@@ -38,7 +38,10 @@ my dashboard").
 3. Grant that service account `roles/aiplatform.user` on the project so it can
    call Vertex AI Gemini (provisioning covers this).
 4. Optional env: `BQ_PROJECT_ID` (default `mcc-poc-477801`), `ASK_GEMINI_MODEL`
-   (default `gemini-2.5-flash`), `ASK_LOCATION` (default `australia-southeast1`),
+   (default `gemini-3.6-flash`), `ASK_GEMINI_LOCATION` (default `global`; Gemini's
+   region, separate from BigQuery's — `global` unlocks newer models not offered in
+   `australia-southeast1`, at the cost of the prompt and sample rows leaving AU),
+   `ASK_LOCATION` (BigQuery data location, default `australia-southeast1`),
    `ALLOWED_ORIGIN` (CORS lock, same as `bq.js`).
 5. Optional cost/rate controls (US-008): `ASK_LOG_TABLE` (`dataset.table`, e.g.
    `dashboard_ops.dashboard_ai_log`; logging is off when unset), `ASK_RATE_LIMIT`

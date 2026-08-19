@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import resolve from './resolve.js';
-const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange } = resolve;
+const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange, wantsTimeSeries } = resolve;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const model = JSON.parse(readFileSync(join(here, 'models', 'fastcover.json'), 'utf8'));
@@ -135,6 +135,40 @@ test('an expression-based dimension (dim.sql) is still supported as an explicit 
   const built = buildQuery(m2, { source: 's', metrics: ['spend'], dimension: 'band' }, { today: TODAY });
   assert.match(built.sql, /CASE WHEN age IN/);
   assert.match(built.sql, /END AS dim/);
+});
+
+test('wantsTimeSeries detects a time breakdown', () => {
+  for (const q of ['spend by age over time', 'spend by age broken down by week', 'weekly spend by channel', 'cpa trend']) {
+    assert.equal(wantsTimeSeries(q), true, `should detect: ${q}`);
+  }
+  for (const q of ['spend by platform', 'top meta campaigns', 'which age groups']) {
+    assert.equal(wantsTimeSeries(q), false, `should not detect: ${q}`);
+  }
+});
+
+test('by-age-over-time resolves to a curated dimension + grain spec', () => {
+  const hit = resolveQuestion(model, 'spend by age over time');
+  assert.ok(hit, 'expected a curated match');
+  assert.equal(hit.spec.source, 'age');
+  assert.equal(hit.spec.dimension, 'age_band');
+  assert.equal(hit.spec.grain, 'week');
+});
+
+test('a dimension + grain produces a pivot viz (one series per value over time)', () => {
+  const spec = { source: 'age', metrics: ['spend'], dimension: 'age_band', grain: 'week' };
+  const built = buildQuery(model, spec, { today: TODAY });
+  assert.match(built.sql, /DATE_TRUNC\(date, WEEK\(MONDAY\)\) AS bucket/);
+  assert.match(built.sql, /age_band AS dim/);
+  assert.match(built.sql, /GROUP BY bucket, dim/);
+  const viz = buildVizSpec(model, spec, built, [
+    { bucket: '2026-07-06', dim: '18-34', spend: '100' },
+    { bucket: '2026-07-06', dim: '35-64', spend: '200' },
+  ]);
+  assert.equal(viz.chartType, 'pivot');
+  assert.equal(viz.x.key, 'bucket');
+  assert.equal(viz.pivot.key, 'dim');
+  assert.equal(viz.metric.key, 'spend');
+  assert.equal(viz.rowCount, 2);
 });
 
 test('a time-series spec produces a bucketed, ordered query and a combo viz', () => {

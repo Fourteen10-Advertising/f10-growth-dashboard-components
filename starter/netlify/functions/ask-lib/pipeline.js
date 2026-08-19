@@ -45,9 +45,15 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   // ── 1/2. Resolve to either a curated spec (+ built SQL) or a fallback SQL ──
   let path = null, spec = null, built = null, sql = null;
 
-  // Skip the fixed curated matcher when the question names its own time period,
-  // so an explicit range ("last 6 months") reaches the range-aware model path.
-  const det = resolve.hasExplicitDateRange(question) ? null : resolve.resolveQuestion(model, question);
+  // Skip the fixed curated matcher when the question names its own time period
+  // ("last 6 months"), so the range-aware model path handles it. Also skip a
+  // matched question that has no grain when the user clearly wants a time series
+  // ("by week", "over time"), so it becomes a proper breakdown-over-time.
+  let det = null;
+  if (!resolve.hasExplicitDateRange(question)) {
+    const cand = resolve.resolveQuestion(model, question);
+    if (cand && !(resolve.wantsTimeSeries(question) && !(cand.spec && cand.spec.grain))) det = cand;
+  }
   if (det) { path = 'curated-deterministic'; spec = det.spec; }
 
   // Track a model/infra failure separately from "the model had no answer", so a

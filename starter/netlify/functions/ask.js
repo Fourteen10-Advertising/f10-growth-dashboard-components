@@ -17,7 +17,7 @@
  *     (from the framework's ask/models/<client>.json).
  *   - Set GOOGLE_SERVICE_ACCOUNT to the client's SCOPED service account JSON.
  *   - Optional env: BQ_PROJECT_ID (default mcc-poc-477801),
- *     ASK_GEMINI_MODEL (default gemini-2.5-flash),
+ *     ASK_GEMINI_MODEL (default gemini-3.6-flash), ASK_GEMINI_LOCATION (default global),
  *     ASK_LOCATION (default australia-southeast1),
  *     ALLOWED_ORIGIN (CORS lock, same as bq.js).
  */
@@ -32,8 +32,12 @@ const { SlidingWindow, clientKey } = require('./ask-lib/ratelimit.js');
 const { makeLogger } = require('./ask-lib/log.js');
 
 const PROJECT = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
-const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1';
-const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-2.5-flash';
+const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1'; // BigQuery data location (stays in AU)
+// Gemini can run in a different location than BigQuery. 'global' unlocks newer
+// models (e.g. gemini-3.6-flash) not offered in australia-southeast1. Note: with a
+// non-AU Gemini location, the prompt and any sample rows leave the AU region.
+const GEMINI_LOCATION = process.env.ASK_GEMINI_LOCATION || 'global';
+const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-3.6-flash';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const LOG_TABLE = process.env.ASK_LOG_TABLE || ''; // e.g. dashboard_ops.dashboard_ai_log
 
@@ -88,20 +92,20 @@ exports.handler = async (event) => {
       runQuery: (sql, opts) => bq.runQuery(PROJECT, token, sql, { location: LOCATION, ...opts }),
       parseRows: bq.parseRows,
       geminiSpec: async (q) => gemini.parseJson(await gemini.generate(token, {
-        project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
+        project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: gemini.buildSpecSystemPrompt(MODEL, today), prompt: q, json: true,
       })),
       geminiFallbackSql: async (q) => gemini.generate(token, {
-        project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
+        project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }), prompt: q, json: false,
       }),
       geminiFixSql: async (q, badSql, errorMsg) => gemini.generate(token, {
-        project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
+        project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }),
         prompt: gemini.buildFixSqlPrompt(q, badSql, errorMsg), json: false,
       }),
       geminiInterpret: async (q, vizSpec, rows) => gemini.generate(token, {
-        project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
+        project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: 'You are a marketing analyst writing a short, plain interpretation for a client.',
         prompt: gemini.buildInterpretationPrompt(q, vizSpec, rows), json: false,
       }),
