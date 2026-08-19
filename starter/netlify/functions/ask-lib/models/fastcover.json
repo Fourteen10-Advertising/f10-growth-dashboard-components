@@ -338,28 +338,29 @@
     },
     "age": {
       "label": "Age performance",
-      "table": "fastcover_marts.age_gender_daily",
+      "table": "fastcover_reporting.rollup_age_daily",
       "dateColumn": "date",
-      "notes": "Age performance source. Includes Bing. Break down by the raw `age` values as they appear in the warehouse, or by platform. Age grouping is a data/marts concern, not hardcoded here, so the breakdown reflects whatever bands the client's data uses (which may differ from the standing Age tab's consolidated view). The age values are populated from the warehouse by the introspection step.",
+      "notes": "Governed age performance from the reporting layer, which provides a cleaned `age_band`. Break down by `age_band` (the data-layer bands) or by the raw `age` value. The reporting-layer bands (18-34, 35-64, 65+) differ from the standing Age tab, which regroups the raw data into 18-34/35-49/50-64/65+ in the dashboard's own code; reconcile upstream if they must match. Age-by-platform or by-gender is not in this rollup; the raw fastcover_marts.age_gender_daily is reachable via the fallback for those.",
       "grains": [
         "day",
         "week",
         "month"
       ],
       "dimensions": {
-        "platform": {
-          "column": "platform",
-          "label": "Platform",
+        "age_band": {
+          "column": "age_band",
+          "label": "Age band",
           "options": [
-            "bing",
-            "gads",
-            "meta",
-            "tiktok"
+            "18-34",
+            "35-64",
+            "65+",
+            "Under 18",
+            "Unknown"
           ]
         },
         "age": {
           "column": "age",
-          "label": "Age",
+          "label": "Age (raw)",
           "options": [
             "0-12",
             "13-17",
@@ -618,7 +619,7 @@
           "roas",
           "net_profit"
         ],
-        "dimension": "age",
+        "dimension": "age_band",
         "viz": "table",
         "orderBy": {
           "metric": "spend",
@@ -628,7 +629,7 @@
     }
   ],
   "warehouse": {
-    "generatedAt": "2026-08-19T05:40:46.210Z",
+    "generatedAt": "2026-08-19T05:50:19.795Z",
     "tables": {
       "fastcover_marts.age_gender_daily": {
         "columns": [

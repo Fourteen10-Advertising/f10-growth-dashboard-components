@@ -115,11 +115,14 @@ test('viz spec maps onto the shared builders', () => {
   assert.equal(viz.dateRange.start, built.start);
 });
 
-test('the age dimension reads the raw age column, not a hardcoded grouping', () => {
-  const built = buildQuery(model, { source: 'age', metrics: ['spend', 'conversions'], dimension: 'age', viz: 'table' }, { today: TODAY });
-  assert.match(built.sql, /age AS dim/);
-  assert.doesNotMatch(built.sql, /CASE WHEN/);
-  assert.match(built.sql, /GROUP BY dim/);
+test('the by-age question uses the governed clean age_band from the reporting layer', () => {
+  const hit = resolveQuestion(model, 'spend by age');
+  assert.equal(hit.spec.source, 'age');
+  assert.equal(hit.spec.dimension, 'age_band');
+  const built = buildQuery(model, hit.spec, { today: TODAY });
+  assert.match(built.sql, /rollup_age_daily/);
+  assert.match(built.sql, /age_band AS dim/);
+  assert.doesNotMatch(built.sql, /CASE WHEN/); // clean band comes from the data, not a hardcoded rule
 });
 
 test('an expression-based dimension (dim.sql) is still supported as an explicit opt-in', () => {
