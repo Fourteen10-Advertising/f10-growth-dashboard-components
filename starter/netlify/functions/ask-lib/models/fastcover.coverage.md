@@ -1,12 +1,22 @@
 # Semantic-model coverage: fastcover
 
-Generated: 2026-08-19T05:50:19.795Z. Datasets: fastcover_marts, fastcover_reporting.
+Generated: 2026-08-19T06:43:48.936Z. Datasets: fastcover_marts, fastcover_reporting.
 
 This report is advisory. Curated metrics stay accurate; the guarded
 text-to-SQL fallback can already reach the columns below. Promote the ones
 worth a first-class, reconciled metric or dimension into the model.
 
 ## Modelled tables — columns not yet curated
+
+### fastcover_marts.age_gender_daily (source: age)
+- client
+- currency
+- campaign_name
+- ad_group
+- impressions
+- clicks
+- primary_cpa
+- roas
 
 ### fastcover_marts.ga4_events_daily (source: ga4_transactions)
 - client
@@ -56,14 +66,6 @@ worth a first-class, reconciled metric or dimension into the model.
 - clicks
 - conversion_value
 
-### fastcover_reporting.rollup_age_daily (source: age)
-- client
-- currency
-- impressions
-- clicks
-- primary_cpa
-- roas
-
 ### fastcover_reporting.rollup_platform_daily (source: blended)
 - client
 - currency
@@ -73,7 +75,6 @@ worth a first-class, reconciled metric or dimension into the model.
 - roas
 
 ## Allowed tables not modelled by any source
-- fastcover_marts.age_gender_daily
 - fastcover_marts.component_performance
 - fastcover_marts.component_variant_performance
 - fastcover_marts.creative_age_reporting
@@ -87,5 +88,6 @@ worth a first-class, reconciled metric or dimension into the model.
 - fastcover_marts.tiktok_creative_reporting
 - fastcover_reporting.gads_impression_share_account
 - fastcover_reporting.pacing_targets
+- fastcover_reporting.rollup_age_daily
 - fastcover_reporting.rollup_conversions_daily
 - fastcover_reporting.rollup_daily

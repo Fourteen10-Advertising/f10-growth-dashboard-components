@@ -338,9 +338,9 @@
     },
     "age": {
       "label": "Age performance",
-      "table": "fastcover_reporting.rollup_age_daily",
+      "table": "fastcover_marts.age_gender_daily",
       "dateColumn": "date",
-      "notes": "Governed age performance from the reporting layer, which provides a cleaned `age_band`. Break down by `age_band` (the data-layer bands) or by the raw `age` value. The reporting-layer bands (18-34, 35-64, 65+) differ from the standing Age tab, which regroups the raw data into 18-34/35-49/50-64/65+ in the dashboard's own code; reconcile upstream if they must match. Age-by-platform or by-gender is not in this rollup; the raw fastcover_marts.age_gender_daily is reachable via the fallback for those.",
+      "notes": "Detailed age performance. Groups by the governed `age_band` (classified once in dataform via the shared age-band grid), or by raw `age`, platform, or gender. Same age_band definition as rollup_age_daily, so numbers reconcile; this detailed mart additionally allows age-by-platform and age-by-gender. Gender is not yet normalised in the marts (mixed case/variants), so it is not a curated dimension yet; it remains reachable via the guarded fallback and should get the same dataform treatment as age_band.",
       "grains": [
         "day",
         "week",
@@ -380,6 +380,16 @@
             "AGE_55_100",
             "NONE",
             "Unknown"
+          ]
+        },
+        "platform": {
+          "column": "platform",
+          "label": "Platform",
+          "options": [
+            "bing",
+            "gads",
+            "meta",
+            "tiktok"
           ]
         }
       },
@@ -629,7 +639,7 @@
     }
   ],
   "warehouse": {
-    "generatedAt": "2026-08-19T05:50:19.795Z",
+    "generatedAt": "2026-08-19T06:43:48.936Z",
     "tables": {
       "fastcover_marts.age_gender_daily": {
         "columns": [
@@ -663,6 +673,10 @@
           },
           {
             "name": "ad_group",
+            "type": "STRING"
+          },
+          {
+            "name": "age_band",
             "type": "STRING"
           },
           {
