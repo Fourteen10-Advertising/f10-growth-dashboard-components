@@ -27,6 +27,12 @@ The Netlify handler is `../ask.js`.
 4. Optional env: `BQ_PROJECT_ID` (default `mcc-poc-477801`), `ASK_GEMINI_MODEL`
    (default `gemini-2.5-flash`), `ASK_LOCATION` (default `australia-southeast1`),
    `ALLOWED_ORIGIN` (CORS lock, same as `bq.js`).
+5. Optional cost/rate controls (US-008): `ASK_LOG_TABLE` (`dataset.table`, e.g.
+   `dashboard_ops.dashboard_ai_log`; logging is off when unset), `ASK_RATE_LIMIT`
+   (requests per window, default 30), `ASK_RATE_WINDOW_MS` (default 60000),
+   `ASK_CACHE_TTL_MS` (default 60000). When `ASK_LOG_TABLE` is set, the client's
+   scoped SA also needs `roles/bigquery.dataEditor` on ONLY that log table
+   (table-level IAM).
 
 ## Tests
 

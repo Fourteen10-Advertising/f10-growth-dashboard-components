@@ -27,11 +27,19 @@
 const bq = require('./ask-lib/bq-client.js');
 const gemini = require('./ask-lib/gemini.js');
 const { runAsk } = require('./ask-lib/pipeline.js');
+const { TtlCache, keyFor } = require('./ask-lib/cache.js');
+const { SlidingWindow, clientKey } = require('./ask-lib/ratelimit.js');
+const { makeLogger } = require('./ask-lib/log.js');
 
 const PROJECT = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
 const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1';
 const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-2.5-flash';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
+const LOG_TABLE = process.env.ASK_LOG_TABLE || ''; // e.g. dashboard_ops.dashboard_ai_log
+
+// Per-instance singletons (survive across warm invocations).
+const CACHE = new TtlCache(Number(process.env.ASK_CACHE_TTL_MS || 60000), 200);
+const LIMITER = new SlidingWindow(Number(process.env.ASK_RATE_LIMIT || 30), Number(process.env.ASK_RATE_WINDOW_MS || 60000));
 
 let MODEL = null;
 try { MODEL = require('./semantic-model.json'); } catch { MODEL = null; }
@@ -46,6 +54,19 @@ exports.handler = async (event) => {
 
   try {
     const { question } = JSON.parse(event.body || '{}');
+
+    // Per-site rate limit (US-008): reject abusive volumes with a clear message.
+    const rl = LIMITER.check(clientKey(event));
+    if (!rl.allowed) {
+      return { statusCode: 429, headers: { ...cors(event), 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) },
+        body: JSON.stringify({ error: 'Too many questions right now. Please wait a moment and try again.' }) };
+    }
+
+    // Cache identical questions within the window so they are not re-billed (US-008).
+    const today = new Date().toISOString().slice(0, 10);
+    const cacheKey = keyFor(question || '', today);
+    const cached = CACHE.get(cacheKey);
+    if (cached) return json(event, 200, { ...cached, cached: true });
 
     const saRaw = process.env.GOOGLE_SERVICE_ACCOUNT;
     if (!saRaw) throw new Error('GOOGLE_SERVICE_ACCOUNT is not set');
@@ -75,17 +96,20 @@ exports.handler = async (event) => {
       }),
     };
 
-    const today = new Date().toISOString().slice(0, 10);
-    const logger = makeLogger(sa, event);
+    // Every ask writes a log row (client, question, path, sql, bytes, rows,
+    // latency, outcome, ts) so demand can be mined; no-op if ASK_LOG_TABLE unset.
+    const logger = makeLogger({ project: PROJECT, token, table: LOG_TABLE, client: MODEL.client });
     const { vizSpec, meta } = await runAsk({ model: MODEL, question, today, clients, logger });
 
     // The browser gets the viz spec plus the request-to-dashboard essentials
     // (validated SQL and path). The SQL is read-only and dataset-scoped; the
     // issue function (US-010) re-validates any SQL it is handed.
-    return json(event, 200, {
+    const payload = {
       vizSpec,
       request: { sql: meta.sql, path: meta.path, dateRange: meta.dateRange, rowCount: meta.rowCount },
-    });
+    };
+    CACHE.set(cacheKey, payload);
+    return json(event, 200, payload);
   } catch (err) {
     const status = (err && err.status) || 500;
     console.error('[ask] error:', err && err.message ? err.message : err);
@@ -96,12 +120,6 @@ exports.handler = async (event) => {
     return json(event, status, { error: message });
   }
 };
-
-/* Logging + cost/rate controls are added by US-008; until then this is a no-op
- * hook so the pipeline shape is stable. */
-function makeLogger(/* sa, event */) {
-  return null;
-}
 
 function json(event, statusCode, obj) { return { statusCode, headers: cors(event), body: JSON.stringify(obj) }; }
 
