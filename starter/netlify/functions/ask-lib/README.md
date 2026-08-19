@@ -50,6 +50,44 @@ my dashboard").
    scoped SA also needs `roles/bigquery.dataEditor` on ONLY that log table
    (table-level IAM).
 
+## Question log (US-008)
+
+Every ask writes one row to `ASK_LOG_TABLE`, including the asks that FAIL. A
+failed ask (`outcome != 'ok'`) is the highest-value signal in the log: it is a
+question a client wanted answered that the dashboard could not, so mining the
+failures is how you decide what to curate or build next.
+
+Create the table once (shared across clients, since `client` is a column):
+
+```sql
+CREATE TABLE IF NOT EXISTS `mcc-poc-477801.dashboard_ops.dashboard_ai_log` (
+  client STRING, question STRING, path STRING, sql STRING,
+  bytes_billed INT64, row_count INT64, latency_ms INT64,
+  outcome STRING, error STRING, ts TIMESTAMP
+);
+```
+
+`outcome` is `ok` on success, or a reason code: `cannot_answer`,
+`too_much_data`, `model_unavailable`, `unsafe_sql`, `out_of_scope_table`,
+`bad_request`, `error`. `error` holds the underlying cause (e.g. the BigQuery
+dry-run message) for failures and is `null` on success. Inserts use
+`ignoreUnknownValues`, so a table created before the `error` column was added
+keeps logging every other field until it is migrated with:
+
+```sql
+ALTER TABLE `mcc-poc-477801.dashboard_ops.dashboard_ai_log` ADD COLUMN IF NOT EXISTS error STRING;
+```
+
+Rank the unmet demand per client:
+
+```sql
+SELECT client, question, COUNT(*) AS asks, ANY_VALUE(error) AS sample_error
+FROM `mcc-poc-477801.dashboard_ops.dashboard_ai_log`
+WHERE outcome != 'ok' AND ts >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)
+GROUP BY client, question
+ORDER BY asks DESC;
+```
+
 ## Tests
 
 ```
