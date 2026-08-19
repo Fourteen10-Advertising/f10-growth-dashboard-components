@@ -29,6 +29,16 @@ const DASHBOARD = {
 `askFunction` (default `/.netlify/functions/ask`), `requestFunction` (optional; when
 set, the "Add to my dashboard" action appears), `client`, and `suggestions`.
 
+## Date range
+
+The tab sends the dashboard's currently selected date range with every question,
+so the date picker (and any change to it) drives the Ask answers just like the
+other tabs. If the question itself names a period (for example "spend by platform
+for the last 6 months"), that wins over the picker: the model maps the phrase to a
+range and the fixed curated matcher is skipped so the range is honoured. Supported
+phrasings include last N days/weeks/months, this month, last month, year to date,
+and explicit dates.
+
 ## What it renders
 
 - A branded input row and example chips.

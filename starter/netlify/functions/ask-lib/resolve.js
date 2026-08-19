@@ -50,6 +50,25 @@ function subYearIso(iso) {
   d.setUTCFullYear(d.getUTCFullYear() - 1);
   return d.toISOString().slice(0, 10);
 }
+function subMonthsIso(iso, n) {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCMonth(d.getUTCMonth() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/* Does the question itself name a time period? If so we let that drive the range
+ * (via the model), rather than a curated default or the dashboard's picker. */
+function hasExplicitDateRange(question) {
+  const s = String(question || '').toLowerCase();
+  return /(last|past|previous|trailing)\s+\d*\s*(day|week|month|quarter|year)s?/.test(s)
+    || /\bthis\s+(week|month|quarter|year)\b/.test(s)
+    || /\byear[-\s]?to[-\s]?date\b|\bytd\b/.test(s)
+    || /\b(yesterday|today)\b/.test(s)
+    || /\bq[1-4]\b/.test(s)
+    || /\d{4}-\d{2}-\d{2}/.test(s)
+    || /\bsince\s+\d{4}/.test(s)
+    || /\b(in|during|for)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(s);
+}
 
 /* ── date range resolution ──
  * Accepts, in priority order:
@@ -69,12 +88,19 @@ function resolveDateRange(dateRange, today) {
     const days = Math.min(Math.floor(dr.lastDays), 730);
     return { start: addDaysIso(t, -(days - 1)), end: t };
   }
+  if (typeof dr.lastMonths === 'number' && dr.lastMonths > 0) {
+    return { start: subMonthsIso(t, Math.min(Math.floor(dr.lastMonths), 36)), end: t };
+  }
   switch (dr.preset) {
     case 'today': return { start: t, end: t };
     case 'yesterday': { const y = addDaysIso(t, -1); return { start: y, end: y }; }
     case 'last_7_days': return { start: addDaysIso(t, -6), end: t };
     case 'last_30_days': return { start: addDaysIso(t, -29), end: t };
     case 'last_90_days': return { start: addDaysIso(t, -89), end: t };
+    case 'last_3_months': return { start: subMonthsIso(t, 3), end: t };
+    case 'last_6_months': return { start: subMonthsIso(t, 6), end: t };
+    case 'last_12_months':
+    case 'last_year': return { start: subMonthsIso(t, 12), end: t };
     case 'this_month': return { start: startOfMonthIso(t), end: t };
     case 'last_month': {
       const lastMonthEnd = addDaysIso(startOfMonthIso(t), -1);
@@ -336,7 +362,8 @@ function resolveCurated(model, question, opts = {}) {
 }
 
 module.exports = {
-  sqlStr, isIsoDate, addDaysIso, resolveDateRange, comparisonWindows, gGroup,
+  sqlStr, isIsoDate, addDaysIso, subMonthsIso, resolveDateRange, comparisonWindows, gGroup,
+  hasExplicitDateRange,
   validateModel, clampLimit, filterClause, buildQuery,
   pickChartType, buildVizSpec, buildTitle, interpret, formatValue,
   resolveQuestion, resolveCurated,

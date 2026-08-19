@@ -560,6 +560,9 @@ function f10AskTab(cfg){
   const id = cfg.id || 'ask';
   const endpoint = cfg.askFunction || '/.netlify/functions/ask';
   const suggestions = cfg.suggestions || [];
+  // Latest dashboard context (updated on every load), so a submit uses the
+  // currently-selected date range unless the question names its own period.
+  let askCtx = null;
 
   const chips = suggestions.map(s => `<button type="button" class="ask-chip" data-q="${f10AskEscape(s)}">${f10AskEscape(s)}</button>`).join('');
   const body = `
@@ -589,7 +592,8 @@ function f10AskTab(cfg){
 
     let data;
     try {
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+      const dateRange = (askCtx && askCtx.dates) ? { start: askCtx.dates.s, end: askCtx.dates.e } : undefined;
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, dateRange }) });
       try { data = await res.json(); } catch { data = null; }
       if(!res.ok || !data || !data.vizSpec) throw new Error((data && data.error) || 'Could not answer that question.');
     } catch(err){
@@ -639,15 +643,23 @@ function f10AskTab(cfg){
     }
   }
 
-  function load(){
+  // load() runs on every tab activation and whenever the date range, filters or
+  // granularity change, so it refreshes askCtx each time. Listeners are bound once
+  // (guarded) so repeated loads do not stack duplicate handlers.
+  function load(ctx){
+    askCtx = ctx;
     const input = document.getElementById(id + '-q');
     const go = document.getElementById(id + '-go');
-    if(go) go.addEventListener('click', () => submit(input ? input.value : ''));
-    if(input) input.addEventListener('keydown', (e) => { if(e.key === 'Enter') submit(input.value); });
     const sugg = document.getElementById(id + '-suggestions');
-    if(sugg) sugg.querySelectorAll('.ask-chip').forEach(chip => {
-      chip.addEventListener('click', () => { const q = chip.getAttribute('data-q'); if(input) input.value = q; submit(q); });
-    });
+    if(go && !go._askBound){ go.addEventListener('click', () => submit(input ? input.value : '')); go._askBound = true; }
+    if(input && !input._askBound){ input.addEventListener('keydown', (e) => { if(e.key === 'Enter') submit(input.value); }); input._askBound = true; }
+    if(sugg && !sugg._askBound){
+      sugg.addEventListener('click', (e) => {
+        const chip = e.target.closest('.ask-chip'); if(!chip) return;
+        const q = chip.getAttribute('data-q'); if(input) input.value = q; submit(q);
+      });
+      sugg._askBound = true;
+    }
   }
 
   return {

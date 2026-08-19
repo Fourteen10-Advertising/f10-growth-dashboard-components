@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import resolve from './resolve.js';
-const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange } = resolve;
+const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange } = resolve;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const model = JSON.parse(readFileSync(join(here, 'models', 'fastcover.json'), 'utf8'));
@@ -57,6 +57,22 @@ test('date presets resolve deterministically against an injected today', () => {
   assert.deepEqual(resolveDateRange({ preset: 'last_7_days' }, TODAY), { start: '2026-08-13', end: '2026-08-19' });
   assert.deepEqual(resolveDateRange({ lastDays: 28 }, TODAY), { start: '2026-07-23', end: '2026-08-19' });
   assert.deepEqual(resolveDateRange({ start: '2026-01-01', end: '2026-01-31' }, TODAY), { start: '2026-01-01', end: '2026-01-31' });
+});
+
+test('month-based date presets and lastMonths resolve from today', () => {
+  assert.deepEqual(resolveDateRange({ preset: 'last_6_months' }, TODAY), { start: '2026-02-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ preset: 'last_3_months' }, TODAY), { start: '2026-05-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ preset: 'last_12_months' }, TODAY), { start: '2025-08-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ lastMonths: 6 }, TODAY), { start: '2026-02-19', end: '2026-08-19' });
+});
+
+test('hasExplicitDateRange detects a time phrase in the question', () => {
+  for (const q of ['spend for the last 6 months', 'this month by platform', 'year to date spend', 'yesterday please', 'spend since 2025']) {
+    assert.equal(hasExplicitDateRange(q), true, `should detect: ${q}`);
+  }
+  for (const q of ['spend by platform', 'top meta campaigns', 'impression share by group']) {
+    assert.equal(hasExplicitDateRange(q), false, `should not detect: ${q}`);
+  }
 });
 
 test('filter values are single-quote escaped', () => {

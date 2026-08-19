@@ -34,7 +34,7 @@ function badRequest(msg) { const e = new Error(msg); e.status = 400; return e; }
  * @param {function} [args.logger] optional async (logRow) => void  (US-008)
  * @returns {Promise<{vizSpec, meta}>}
  */
-async function runAsk({ model, question, today, clients, logger }) {
+async function runAsk({ model, question, today, clients, logger, defaultDateRange }) {
   const started = Date.now();
   if (typeof question !== 'string' || !question.trim()) throw badRequest('question is required');
   if (question.length > MAX_QUESTION_LEN) throw badRequest('question is too long');
@@ -45,7 +45,9 @@ async function runAsk({ model, question, today, clients, logger }) {
   // ── 1/2. Resolve to either a curated spec (+ built SQL) or a fallback SQL ──
   let path = null, spec = null, built = null, sql = null;
 
-  const det = resolve.resolveQuestion(model, question);
+  // Skip the fixed curated matcher when the question names its own time period,
+  // so an explicit range ("last 6 months") reaches the range-aware model path.
+  const det = resolve.hasExplicitDateRange(question) ? null : resolve.resolveQuestion(model, question);
   if (det) { path = 'curated-deterministic'; spec = det.spec; }
 
   if (!spec && clients.geminiSpec) {
@@ -57,6 +59,9 @@ async function runAsk({ model, question, today, clients, logger }) {
   }
 
   if (spec) {
+    // A curated spec with no explicit date range inherits the dashboard's selected
+    // range (defaultDateRange). A question that named its own period already set it.
+    if (!spec.dateRange && defaultDateRange) spec = { ...spec, dateRange: defaultDateRange };
     built = resolve.buildQuery(model, spec, { today });
     sql = built.sql;
   } else {

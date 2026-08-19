@@ -53,7 +53,11 @@ exports.handler = async (event) => {
   if (!MODEL) return json(event, 501, { error: 'The Ask feature is not configured for this site.' });
 
   try {
-    const { question } = JSON.parse(event.body || '{}');
+    const { question, dateRange } = JSON.parse(event.body || '{}');
+    // The dashboard's selected date range, used when the question does not name its own.
+    const iso = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const defaultDateRange = (dateRange && iso(dateRange.start) && iso(dateRange.end))
+      ? { start: dateRange.start, end: dateRange.end } : null;
 
     // Per-site rate limit (US-008): reject abusive volumes with a clear message.
     const rl = LIMITER.check(clientKey(event));
@@ -63,8 +67,10 @@ exports.handler = async (event) => {
     }
 
     // Cache identical questions within the window so they are not re-billed (US-008).
+    // The key includes the selected range so changing the date picker returns a fresh answer.
     const today = new Date().toISOString().slice(0, 10);
-    const cacheKey = keyFor(question || '', today);
+    const rangeKey = defaultDateRange ? `${defaultDateRange.start}_${defaultDateRange.end}` : 'default';
+    const cacheKey = keyFor(question || '', today) + '::' + rangeKey;
     const cached = CACHE.get(cacheKey);
     if (cached) return json(event, 200, { ...cached, cached: true });
 
@@ -83,11 +89,11 @@ exports.handler = async (event) => {
       parseRows: bq.parseRows,
       geminiSpec: async (q) => gemini.parseJson(await gemini.generate(token, {
         project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
-        system: gemini.buildSpecSystemPrompt(MODEL), prompt: q, json: true,
+        system: gemini.buildSpecSystemPrompt(MODEL, today), prompt: q, json: true,
       })),
       geminiFallbackSql: async (q) => gemini.generate(token, {
         project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
-        system: gemini.buildFallbackSqlSystemPrompt(MODEL), prompt: q, json: false,
+        system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }), prompt: q, json: false,
       }),
       geminiInterpret: async (q, vizSpec, rows) => gemini.generate(token, {
         project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
@@ -99,7 +105,7 @@ exports.handler = async (event) => {
     // Every ask writes a log row (client, question, path, sql, bytes, rows,
     // latency, outcome, ts) so demand can be mined; no-op if ASK_LOG_TABLE unset.
     const logger = makeLogger({ project: PROJECT, token, table: LOG_TABLE, client: MODEL.client });
-    const { vizSpec, meta } = await runAsk({ model: MODEL, question, today, clients, logger });
+    const { vizSpec, meta } = await runAsk({ model: MODEL, question, today, clients, logger, defaultDateRange });
 
     // The browser gets the viz spec plus the request-to-dashboard essentials
     // (validated SQL and path). The SQL is read-only and dataset-scoped; the
