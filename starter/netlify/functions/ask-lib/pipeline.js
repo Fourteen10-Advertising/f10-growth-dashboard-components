@@ -43,7 +43,7 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   const maxBytes = Number((model.limits && model.limits.maxBytes) || guard.DEFAULT_MAX_BYTES);
 
   // ── 1/2. Resolve to either a curated spec (+ built SQL) or a fallback SQL ──
-  let path = null, spec = null, built = null, sql = null;
+  let path = null, spec = null, built = null, sql = null, fallbackViz = null;
 
   // Skip the fixed curated matcher when the question names its own time period
   // ("last 6 months"), so the range-aware model path handles it. Also skip a
@@ -77,11 +77,11 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
     built = resolve.buildQuery(model, spec, { today });
     sql = built.sql;
   } else {
-    if (!clients.geminiFallbackSql) throw badRequest('question could not be answered from the semantic model');
-    let raw = null;
-    try { raw = await clients.geminiFallbackSql(question); }
+    if (!clients.geminiFallback) throw badRequest('question could not be answered from the semantic model');
+    let fb = null;
+    try { fb = await clients.geminiFallback(question); }
     catch (e) { modelError = e; }
-    if (!raw) {
+    if (!fb || !fb.sql) {
       if (modelError) {
         // Infra problem (model unavailable/misconfigured): surface it, do not
         // pretend the question was unanswerable.
@@ -91,8 +91,9 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
       const e = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.');
       e.status = 422; throw e;
     }
-    guard.assertSelectOnly(raw);
-    sql = guard.ensureLimit(raw, maxRows);
+    guard.assertSelectOnly(fb.sql);
+    sql = guard.ensureLimit(fb.sql, maxRows);
+    fallbackViz = fb.viz || null; // the model's chart descriptor for this result
     path = 'fallback-sql';
   }
 
@@ -106,15 +107,15 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
     dry = await clients.dryRun(sql);
   } catch (e1) {
     let repaired = false;
-    if (path === 'fallback-sql' && clients.geminiFixSql) {
+    if (path === 'fallback-sql' && clients.geminiFix) {
       let fixed = null;
-      try { fixed = await clients.geminiFixSql(question, sql, e1.message); } catch { /* ignore */ }
-      if (fixed) {
+      try { fixed = await clients.geminiFix(question, sql, e1.message); } catch { /* ignore */ }
+      if (fixed && fixed.sql) {
         try {
-          guard.assertSelectOnly(fixed);
-          const fixedSql = guard.ensureLimit(fixed, maxRows);
+          guard.assertSelectOnly(fixed.sql);
+          const fixedSql = guard.ensureLimit(fixed.sql, maxRows);
           dry = await clients.dryRun(fixedSql);
-          sql = fixedSql; path = 'fallback-sql-repaired'; repaired = true;
+          sql = fixedSql; if (fixed.viz) fallbackViz = fixed.viz; path = 'fallback-sql-repaired'; repaired = true;
         } catch { /* repair failed -> fall through to clean 422 */ }
       }
     }
@@ -142,9 +143,13 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   const rows = clients.parseRows(data);
 
   // ── viz spec ──
+  // Curated path: typed viz from the spec. Fallback path: the model's chart
+  // descriptor (so it can pivot/line like curated), else a generic table.
+  const fbTitle = String(question).trim().slice(0, 90);
   let vizSpec = built
     ? resolve.buildVizSpec(model, spec, built, rows)
-    : buildGenericVizSpec(rows, { title: 'Answer', dateRange: null });
+    : (resolve.buildFallbackViz(fallbackViz, rows, { title: fbTitle, dateRange: defaultDateRange || null })
+       || buildGenericVizSpec(rows, { title: fbTitle, dateRange: defaultDateRange || null }));
 
   // ── grounded interpretation (Gemini; falls back to the deterministic one) ──
   if (clients.geminiInterpret) {

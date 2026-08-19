@@ -177,10 +177,16 @@ function filterClause(src, filter) {
   } else if (filter.column) { expr = filter.column; }
   if (!expr) throw new Error(`filter targets unknown dimension/column: ${JSON.stringify(dimId || filter.column)}`);
   if (!isSql && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(expr)) throw new Error(`illegal column identifier: ${expr}`);
-  if (options && Array.isArray(options) && !options.includes(filter.value)) {
-    throw new Error(`filter value "${filter.value}" not allowed for ${dimId} (allowed: ${options.join(', ')})`);
+  // A filter value may be a single value or an array (multi-select -> IN), so
+  // "compare google and meta" becomes platform IN ('gads','meta'), not an
+  // impossible platform='gads' AND platform='meta'.
+  const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+  if (!values.length) throw new Error(`empty filter value for ${dimId}`);
+  if (options && Array.isArray(options)) {
+    for (const v of values) if (!options.includes(v)) throw new Error(`filter value "${v}" not allowed for ${dimId} (allowed: ${options.join(', ')})`);
   }
-  return `${expr} = '${sqlStr(filter.value)}'`;
+  if (values.length === 1) return `${expr} = '${sqlStr(values[0])}'`;
+  return `${expr} IN (${values.map(v => `'${sqlStr(v)}'`).join(', ')})`;
 }
 
 /**
@@ -318,6 +324,41 @@ function buildVizSpec(model, spec, ctx, rows) {
 
 function grainLabel(g) { return g === 'week' ? 'Week' : g === 'month' ? 'Month' : 'Day'; }
 
+/* Build a viz spec from the fallback's chart descriptor + result rows, so the
+ * guarded text-to-SQL path can render proper charts (pivot/line/bar/combo),
+ * not just a generic table. Returns null if the descriptor is unusable, so the
+ * caller can fall back to a generic table. */
+function buildFallbackViz(descriptor, rows, meta) {
+  const d = descriptor;
+  if (!d || !d.chartType) return null;
+  const m = meta || {};
+  const base = {
+    source: null,
+    title: m.title || 'Answer',
+    dateRange: m.dateRange || null,
+    rowCount: rows ? rows.length : 0,
+    interpretation: (rows && rows.length) ? `${rows.length} row(s) returned.` : 'No data for this question.',
+    rows: rows || [],
+  };
+  const ct = d.chartType;
+  if (ct === 'pivot' && d.x && d.pivot && d.metric && d.metric.key) {
+    return { ...base, chartType: 'pivot', x: d.x, pivot: d.pivot, metric: { key: d.metric.key, label: d.metric.label || d.metric.key, format: d.metric.format || 'count' } };
+  }
+  if ((ct === 'line' || ct === 'bar' || ct === 'combo') && d.x && Array.isArray(d.series) && d.series.length) {
+    return {
+      ...base, chartType: ct, x: d.x,
+      series: d.series.map((s, i) => ({ label: s.label || s.key, key: s.key, format: s.format || 'count', kind: ct === 'combo' ? (i === 0 ? 'bar' : 'line') : ct, axis: s.format === 'money' ? 'cur' : 'cnt' })),
+    };
+  }
+  if (ct === 'kpi' && Array.isArray(d.columns) && d.columns.length) {
+    return { ...base, chartType: 'kpi', columns: d.columns.map(c => ({ label: c.label || c.key, key: c.key, format: c.format || 'count' })) };
+  }
+  if (ct === 'table' && Array.isArray(d.columns) && d.columns.length) {
+    return { ...base, chartType: 'table', columns: d.columns.map(c => ({ label: c.label || c.key, key: c.key, format: c.format || 'text', num: !!c.num })) };
+  }
+  return null;
+}
+
 function buildTitle(model, spec, ctx) {
   const src = model.sources[spec.source];
   const parts = [];
@@ -395,6 +436,6 @@ module.exports = {
   sqlStr, isIsoDate, addDaysIso, subMonthsIso, resolveDateRange, comparisonWindows, gGroup,
   hasExplicitDateRange, wantsTimeSeries,
   validateModel, clampLimit, filterClause, buildQuery,
-  pickChartType, buildVizSpec, buildTitle, interpret, formatValue,
+  pickChartType, buildVizSpec, buildFallbackViz, buildTitle, interpret, formatValue,
   resolveQuestion, resolveCurated,
 };
