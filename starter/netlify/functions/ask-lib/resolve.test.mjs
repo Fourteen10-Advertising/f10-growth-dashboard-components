@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import resolve from './resolve.js';
-const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange } = resolve;
+const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange } = resolve;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const model = JSON.parse(readFileSync(join(here, 'models', 'fastcover.json'), 'utf8'));
@@ -59,6 +59,22 @@ test('date presets resolve deterministically against an injected today', () => {
   assert.deepEqual(resolveDateRange({ start: '2026-01-01', end: '2026-01-31' }, TODAY), { start: '2026-01-01', end: '2026-01-31' });
 });
 
+test('month-based date presets and lastMonths resolve from today', () => {
+  assert.deepEqual(resolveDateRange({ preset: 'last_6_months' }, TODAY), { start: '2026-02-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ preset: 'last_3_months' }, TODAY), { start: '2026-05-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ preset: 'last_12_months' }, TODAY), { start: '2025-08-19', end: '2026-08-19' });
+  assert.deepEqual(resolveDateRange({ lastMonths: 6 }, TODAY), { start: '2026-02-19', end: '2026-08-19' });
+});
+
+test('hasExplicitDateRange detects a time phrase in the question', () => {
+  for (const q of ['spend for the last 6 months', 'this month by platform', 'year to date spend', 'yesterday please', 'spend since 2025']) {
+    assert.equal(hasExplicitDateRange(q), true, `should detect: ${q}`);
+  }
+  for (const q of ['spend by platform', 'top meta campaigns', 'impression share by group']) {
+    assert.equal(hasExplicitDateRange(q), false, `should not detect: ${q}`);
+  }
+});
+
 test('filter values are single-quote escaped', () => {
   const built = buildQuery(model, {
     source: 'meta', metrics: ['spend'], dimension: 'campaign',
@@ -97,6 +113,28 @@ test('viz spec maps onto the shared builders', () => {
   assert.equal(viz.columns[1].format, 'money');
   assert.ok(viz.interpretation.length > 0);
   assert.equal(viz.dateRange.start, built.start);
+});
+
+test('the by-age question uses the governed clean age_band from the reporting layer', () => {
+  const hit = resolveQuestion(model, 'spend by age');
+  assert.equal(hit.spec.source, 'age');
+  assert.equal(hit.spec.dimension, 'age_band');
+  const built = buildQuery(model, hit.spec, { today: TODAY });
+  assert.match(built.sql, /rollup_age_daily/);
+  assert.match(built.sql, /age_band AS dim/);
+  assert.doesNotMatch(built.sql, /CASE WHEN/); // clean band comes from the data, not a hardcoded rule
+});
+
+test('an expression-based dimension (dim.sql) is still supported as an explicit opt-in', () => {
+  const m2 = {
+    client: 'x', project: 'mcc-poc-477801', datasets: ['fastcover_marts'],
+    sources: { s: { table: 'fastcover_marts.age_gender_daily', dateColumn: 'date',
+      dimensions: { band: { column: 'age', label: 'Band', sql: "CASE WHEN age IN ('18-24') THEN '18-34' ELSE 'Other' END" } },
+      metrics: { spend: { label: 'Spend', sql: 'SUM(spend)', format: 'money' } } } },
+  };
+  const built = buildQuery(m2, { source: 's', metrics: ['spend'], dimension: 'band' }, { today: TODAY });
+  assert.match(built.sql, /CASE WHEN age IN/);
+  assert.match(built.sql, /END AS dim/);
 });
 
 test('a time-series spec produces a bucketed, ordered query and a combo viz', () => {

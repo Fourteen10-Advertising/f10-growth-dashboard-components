@@ -50,6 +50,25 @@ function subYearIso(iso) {
   d.setUTCFullYear(d.getUTCFullYear() - 1);
   return d.toISOString().slice(0, 10);
 }
+function subMonthsIso(iso, n) {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCMonth(d.getUTCMonth() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/* Does the question itself name a time period? If so we let that drive the range
+ * (via the model), rather than a curated default or the dashboard's picker. */
+function hasExplicitDateRange(question) {
+  const s = String(question || '').toLowerCase();
+  return /(last|past|previous|trailing)\s+\d*\s*(day|week|month|quarter|year)s?/.test(s)
+    || /\bthis\s+(week|month|quarter|year)\b/.test(s)
+    || /\byear[-\s]?to[-\s]?date\b|\bytd\b/.test(s)
+    || /\b(yesterday|today)\b/.test(s)
+    || /\bq[1-4]\b/.test(s)
+    || /\d{4}-\d{2}-\d{2}/.test(s)
+    || /\bsince\s+\d{4}/.test(s)
+    || /\b(in|during|for)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/.test(s);
+}
 
 /* ── date range resolution ──
  * Accepts, in priority order:
@@ -69,12 +88,19 @@ function resolveDateRange(dateRange, today) {
     const days = Math.min(Math.floor(dr.lastDays), 730);
     return { start: addDaysIso(t, -(days - 1)), end: t };
   }
+  if (typeof dr.lastMonths === 'number' && dr.lastMonths > 0) {
+    return { start: subMonthsIso(t, Math.min(Math.floor(dr.lastMonths), 36)), end: t };
+  }
   switch (dr.preset) {
     case 'today': return { start: t, end: t };
     case 'yesterday': { const y = addDaysIso(t, -1); return { start: y, end: y }; }
     case 'last_7_days': return { start: addDaysIso(t, -6), end: t };
     case 'last_30_days': return { start: addDaysIso(t, -29), end: t };
     case 'last_90_days': return { start: addDaysIso(t, -89), end: t };
+    case 'last_3_months': return { start: subMonthsIso(t, 3), end: t };
+    case 'last_6_months': return { start: subMonthsIso(t, 6), end: t };
+    case 'last_12_months':
+    case 'last_year': return { start: subMonthsIso(t, 12), end: t };
     case 'this_month': return { start: startOfMonthIso(t), end: t };
     case 'last_month': {
       const lastMonthEnd = addDaysIso(startOfMonthIso(t), -1);
@@ -131,17 +157,20 @@ function clampLimit(limit, model) {
 
 function filterClause(src, filter) {
   const dimId = filter.dimension;
-  // A filter may target a declared dimension, or an explicit column (used by defaultFilters
-  // such as GA4 event_name). Only a model-declared column can ever reach SQL.
-  let column = null, options = null;
-  if (src.dimensions && src.dimensions[dimId]) { column = src.dimensions[dimId].column; options = src.dimensions[dimId].options; }
-  else if (filter.column) column = filter.column;
-  if (!column) throw new Error(`filter targets unknown dimension/column: ${JSON.stringify(dimId || filter.column)}`);
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) throw new Error(`illegal column identifier: ${column}`);
+  // A filter may target a declared dimension (plain column or curated `sql`
+  // expression), or an explicit column (used by defaultFilters such as GA4
+  // event_name). Only model-declared expressions ever reach SQL.
+  let expr = null, options = null, isSql = false;
+  if (src.dimensions && src.dimensions[dimId]) {
+    const d = src.dimensions[dimId];
+    expr = d.sql || d.column; options = d.options; isSql = !!d.sql;
+  } else if (filter.column) { expr = filter.column; }
+  if (!expr) throw new Error(`filter targets unknown dimension/column: ${JSON.stringify(dimId || filter.column)}`);
+  if (!isSql && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(expr)) throw new Error(`illegal column identifier: ${expr}`);
   if (options && Array.isArray(options) && !options.includes(filter.value)) {
     throw new Error(`filter value "${filter.value}" not allowed for ${dimId} (allowed: ${options.join(', ')})`);
   }
-  return `${column} = '${sqlStr(filter.value)}'`;
+  return `${expr} = '${sqlStr(filter.value)}'`;
 }
 
 /**
@@ -174,9 +203,12 @@ function buildQuery(model, spec, opts = {}) {
   if (spec.dimension) {
     const dim = src.dimensions && src.dimensions[spec.dimension];
     if (!dim) throw new Error(`unknown dimension ${spec.dimension} for source ${spec.source}`);
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dim.column)) throw new Error(`illegal dimension column: ${dim.column}`);
+    // A dimension is either a plain column or a curated SQL expression (e.g. an
+    // age-band CASE). Plain columns are identifier-checked; curated `sql` is trusted.
+    const dimExpr = dim.sql ? dim.sql : dim.column;
+    if (!dim.sql && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(dim.column)) throw new Error(`illegal dimension column: ${dim.column}`);
     dimSelected = dim;
-    selects.push(`${dim.column} AS dim`);
+    selects.push(`${dimExpr} AS dim`);
   }
   metricIds.forEach(id => {
     const m = src.metrics[id];
@@ -336,7 +368,8 @@ function resolveCurated(model, question, opts = {}) {
 }
 
 module.exports = {
-  sqlStr, isIsoDate, addDaysIso, resolveDateRange, comparisonWindows, gGroup,
+  sqlStr, isIsoDate, addDaysIso, subMonthsIso, resolveDateRange, comparisonWindows, gGroup,
+  hasExplicitDateRange,
   validateModel, clampLimit, filterClause, buildQuery,
   pickChartType, buildVizSpec, buildTitle, interpret, formatValue,
   resolveQuestion, resolveCurated,

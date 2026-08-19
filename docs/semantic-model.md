@@ -173,3 +173,45 @@ testable. The ask function passes the real date; the tests pass a fixed date.
    client onto specs.
 5. Run the tests after adapting the fixtures:
    `node --test starter/netlify/functions/ask-lib/*.test.mjs`.
+
+## Systematic coverage (schema introspection)
+
+The curated model is hand-written for accuracy, but the warehouse holds more than
+any dashboard shows. `tools/build-semantic-model.mjs` reads BigQuery's
+`INFORMATION_SCHEMA` for the client's allowed datasets and enriches the model so
+nothing is hidden from the Ask pipeline:
+
+- It records every table and column into a `warehouse` section of the model. That
+  section is fed to the guarded text-to-SQL fallback, so any column (age, gender,
+  device, a newly added field, an unmodelled table) is reachable, still protected
+  by the dry-run, the dataset allowlist, and single-SELECT validation.
+- It refreshes each low-cardinality dimension's `options` from real distinct
+  values, so the model always knows the actual values (campaign groups, channels,
+  platforms). High-cardinality columns (e.g. campaign names) are left
+  unconstrained so filters on any value still pass.
+- It writes `models/<client>.coverage.md`: the columns available but not yet
+  curated, and the allowed tables not modelled by any source. That report is the
+  backlog of what could become a first-class, reconciled metric or dimension.
+
+Run it under the client's scoped service account (read-only), for example via the
+HQ helper:
+
+```bash
+resolve-client-sa.sh --client fastcover -- \
+  node tools/build-semantic-model.mjs --model starter/netlify/functions/ask-lib/models/fastcover.json
+```
+
+Re-run it on a schedule (or when the warehouse schema changes) so the `warehouse`
+section and dimension values track reality. The pure helpers live in
+`ask-lib/introspect.js` and are unit-tested.
+
+### Expression dimensions (opt-in)
+
+A dimension is normally a plain `column` whose values are read from the warehouse
+by the introspection step, so grouping reflects the data rather than a hardcoded
+rule. Age, for example, groups by the raw `age` values as they appear in the data;
+any consolidation into bands belongs upstream in the marts, not in this model, so
+each client's grouping is whatever their data uses. A dimension may optionally be a
+curated `sql` expression when a client genuinely needs a bespoke grouping the data
+cannot provide; expression dimensions are trusted (not identifier-checked) and keep
+their curated `options` rather than being sampled. Prefer plain columns.

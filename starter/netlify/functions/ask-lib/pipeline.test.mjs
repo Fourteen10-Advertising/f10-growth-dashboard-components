@@ -46,6 +46,25 @@ test('curated deterministic path builds and answers a known question', async () 
   assert.match(res.meta.sql, /rollup_platform_daily/);
 });
 
+test('a curated spec inherits the dashboard date range when the question names none', async () => {
+  const res = await runAsk({ model, question: 'spend by platform', today: TODAY, clients: fakeClients(), defaultDateRange: { start: '2026-01-01', end: '2026-03-31' } });
+  assert.equal(res.meta.path, 'curated-deterministic');
+  assert.equal(res.meta.dateRange.start, '2026-01-01');
+  assert.equal(res.meta.dateRange.end, '2026-03-31');
+  assert.match(res.meta.sql, /BETWEEN '2026-01-01' AND '2026-03-31'/);
+});
+
+test('an explicit period in the question skips the deterministic matcher and drives the range', async () => {
+  let specCalled = false;
+  const clients = fakeClients({
+    geminiSpec: async () => { specCalled = true; return { curated: true, spec: { source: 'blended', metrics: ['spend'], dimension: 'platform', dateRange: { preset: 'last_6_months' }, viz: 'table' } }; },
+  });
+  const res = await runAsk({ model, question: 'spend by platform for the last 6 months', today: TODAY, clients, defaultDateRange: { start: '2026-01-01', end: '2026-03-31' } });
+  assert.equal(specCalled, true, 'the model path was used, not the fixed matcher');
+  assert.equal(res.meta.path, 'curated-gemini');
+  assert.equal(res.meta.dateRange.start, '2026-02-19'); // last_6_months from 2026-08-19, not the dashboard range
+});
+
 test('curated Gemini path is used when deterministic misses but a valid spec comes back', async () => {
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: true, spec: { source: 'meta', metrics: ['spend', 'purchases'], dimension: 'campaign', viz: 'table' } }),
