@@ -17,7 +17,7 @@
  *     (from the framework's ask/models/<client>.json).
  *   - Set GOOGLE_SERVICE_ACCOUNT to the client's SCOPED service account JSON.
  *   - Optional env: BQ_PROJECT_ID (default mcc-poc-477801),
- *     ASK_GEMINI_MODEL (default gemini-3.5-flash),
+ *     ASK_GEMINI_MODEL (default gemini-2.5-flash),
  *     ASK_LOCATION (default australia-southeast1),
  *     ALLOWED_ORIGIN (CORS lock, same as bq.js).
  */
@@ -33,7 +33,7 @@ const { makeLogger } = require('./ask-lib/log.js');
 
 const PROJECT = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
 const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1';
-const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-3.5-flash';
+const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-2.5-flash';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const LOG_TABLE = process.env.ASK_LOG_TABLE || ''; // e.g. dashboard_ops.dashboard_ai_log
 
@@ -95,6 +95,11 @@ exports.handler = async (event) => {
         project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
         system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }), prompt: q, json: false,
       }),
+      geminiFixSql: async (q, badSql, errorMsg) => gemini.generate(token, {
+        project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
+        system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }),
+        prompt: gemini.buildFixSqlPrompt(q, badSql, errorMsg), json: false,
+      }),
       geminiInterpret: async (q, vizSpec, rows) => gemini.generate(token, {
         project: PROJECT, location: LOCATION, model: GEMINI_MODEL,
         system: 'You are a marketing analyst writing a short, plain interpretation for a client.',
@@ -123,8 +128,9 @@ exports.handler = async (event) => {
     if (!status) status = 500;
     // Log the message plus any underlying cause (e.g. the BigQuery dry-run error).
     console.error('[ask] error:', err && err.message ? err.message : err, err && err.cause ? '| cause: ' + err.cause : '');
-    // 4xx carry a safe, non-leaky reason; 5xx stay generic.
-    const message = status >= 400 && status < 500
+    // 4xx and the deliberate 503 (model unavailable) carry a safe, useful reason;
+    // other 5xx stay generic.
+    const message = ((status >= 400 && status < 500) || status === 503)
       ? (err.message || 'This question could not be answered.')
       : 'Something went wrong answering that question.';
     return json(event, status, { error: message });

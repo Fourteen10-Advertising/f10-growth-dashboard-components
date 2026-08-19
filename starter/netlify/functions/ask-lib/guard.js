@@ -39,6 +39,14 @@ const FORBIDDEN_ANYWHERE = [
   'ALTER ', 'CREATE ', 'GRANT ', 'REVOKE ', 'CALL ', 'EXPORT DATA', 'EXECUTE IMMEDIATE',
 ];
 
+/** Strip a surrounding markdown code fence (```sql ... ```) if the model added one. */
+function stripFences(sql) {
+  let s = String(sql).trim();
+  const fenced = s.match(/^```[a-zA-Z]*\s*([\s\S]*?)\s*```$/);
+  if (fenced) return fenced[1].trim();
+  return s.replace(/^```[a-zA-Z]*\s*/, '').replace(/\s*```$/, '').trim();
+}
+
 /** Remove -- line comments and block comments so hidden statements cannot hide. */
 function stripComments(sql) {
   return String(sql)
@@ -47,9 +55,9 @@ function stripComments(sql) {
     .replace(/#[^\n\r]*/g, ' ');          // BigQuery # line comments
 }
 
-/** Collapse whitespace and drop a single trailing semicolon. */
+/** Collapse whitespace, strip any code fence, and drop a single trailing semicolon. */
 function normalize(sql) {
-  let s = stripComments(sql).replace(/\s+/g, ' ').trim();
+  let s = stripComments(stripFences(sql)).replace(/\s+/g, ' ').trim();
   s = s.replace(/;\s*$/, '').trim(); // one trailing semicolon is fine; strip it
   return s;
 }
@@ -147,7 +155,7 @@ function checkBytes(estimatedBytes, maxBytes = DEFAULT_MAX_BYTES) {
 
 module.exports = {
   DEFAULT_MAX_BYTES, DEFAULT_MAX_ROWS,
-  stripComments, normalize,
+  stripFences, stripComments, normalize,
   validateSelectOnly, assertSelectOnly,
   ensureLimit,
   normalizeTableRefs, checkReferencedTables, assertReferencedTables,

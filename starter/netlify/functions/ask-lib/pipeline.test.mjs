@@ -102,6 +102,42 @@ test('injection: a fallback query that references another dataset is refused at 
   );
 });
 
+test('a fallback dry-run failure triggers one-shot self-repair', async () => {
+  let dryCalls = 0;
+  const clients = fakeClients({
+    geminiSpec: async () => ({ curated: false }),
+    geminiFallbackSql: async () => 'SELECT DATE_TRUNC(date, WEEK) FROM `mcc-poc-477801.fastcover_marts.age_gender_daily`',
+    geminiFixSql: async () => 'SELECT DATE_TRUNC(date, WEEK(MONDAY)) AS bucket, SUM(spend) AS spend FROM `mcc-poc-477801.fastcover_marts.age_gender_daily` GROUP BY bucket',
+    dryRun: async () => { dryCalls++; if (dryCalls === 1) throw new Error('Unrecognized name: WEEK'); return { referencedTables: refs('fastcover_marts', 'age_gender_daily'), totalBytesProcessed: 100 }; },
+    parseRows: () => [{ bucket: '2026-07-06', spend: '100' }],
+  });
+  const res = await runAsk({ model, question: 'frobnicate widgets breakdown', today: TODAY, clients });
+  assert.equal(res.meta.path, 'fallback-sql-repaired');
+  assert.equal(dryCalls, 2, 'dry-run runs once (fails) then again on the repaired SQL');
+});
+
+test('a model/infra failure surfaces as 503, not a masked 422', async () => {
+  const clients = fakeClients({
+    geminiSpec: async () => { throw new Error('Publisher model gemini-x not found'); },
+    geminiFallbackSql: async () => { throw new Error('Publisher model gemini-x not found'); },
+  });
+  await assert.rejects(
+    runAsk({ model, question: 'a novel unmapped question about widgets', today: TODAY, clients }),
+    (e) => e.status === 503,
+  );
+});
+
+test('a genuine no-answer (model returns empty, no error) is a 422', async () => {
+  const clients = fakeClients({
+    geminiSpec: async () => ({ curated: false }),
+    geminiFallbackSql: async () => '',
+  });
+  await assert.rejects(
+    runAsk({ model, question: 'a novel unmapped question about widgets', today: TODAY, clients }),
+    (e) => e.status === 422,
+  );
+});
+
 test('a dry-run failure (invalid/unsupported query) is a clean 422, not a 500', async () => {
   const clients = fakeClients({ dryRun: async () => { throw new Error('Unrecognized name: age at [3:5]'); } });
   await assert.rejects(
