@@ -194,3 +194,25 @@ thead th.sortable:hover .sort-ind { opacity: 0.45; }
   #sidebar { width: 100%; }
   .charts-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Ask tab (AI explorer) ── */
+.ask-wrap { max-width: 900px; }
+.ask-input-row { display: flex; gap: 10px; margin: 4px 0 12px; }
+.ask-input { flex: 1; min-width: 0; padding: 12px 14px; font-size: 14px; font-family: inherit; color: var(--ink); background: var(--white); border: 2px solid var(--paper-dark); border-radius: 8px; }
+.ask-input:focus { outline: none; border-color: var(--young-blood); }
+.ask-btn { padding: 12px 22px; font-size: 14px; font-weight: 600; font-family: inherit; color: var(--white); background: var(--young-blood); border: none; border-radius: 8px; cursor: pointer; }
+.ask-btn:hover { background: #360009; }
+.ask-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.ask-chip { padding: 6px 12px; font-size: 12px; font-family: inherit; color: var(--grey); background: var(--paper); border: 1px solid var(--paper-dark); border-radius: 999px; cursor: pointer; }
+.ask-chip:hover { color: var(--ink); border-color: var(--young-blood); }
+.ask-status { font-size: 13px; color: var(--grey); margin: 6px 0; min-height: 18px; }
+.ask-status.loading { color: var(--young-blood); }
+.ask-status.error { color: var(--bad); }
+.ask-interpretation { font-size: 14px; line-height: 1.5; color: var(--ink); margin: 8px 0 10px; }
+.ask-facts { display: flex; gap: 16px; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--grey); margin-bottom: 12px; }
+.ask-actions { margin-top: 8px; }
+.ask-request-btn { padding: 9px 16px; font-size: 13px; font-weight: 600; font-family: inherit; color: var(--young-blood); background: var(--white); border: 2px solid var(--young-blood); border-radius: 8px; cursor: pointer; }
+.ask-request-btn:hover { color: var(--white); background: var(--young-blood); }
+.ask-request-btn:disabled { opacity: 0.5; cursor: default; }
+.ask-req-note { margin-left: 12px; font-size: 12px; color: var(--grey); }
+.ask-req-note a { color: var(--young-blood); }
