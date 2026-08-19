@@ -480,3 +480,184 @@ function f10PacingTab(cfg){
     load,
   };
 }
+
+// ── Ask tab (AI explorer) ─────────────────────────────────────────────────────
+// f10AskTab(cfg) returns a tab object to spread into config.tabs. It renders a
+// question box and shows the answer that the server-side 'ask' Netlify function
+// returns as a typed viz spec, drawn ONLY through the shared builders (kpiCard,
+// buildTable, makeChart, f10ComboChart) so answers look like the rest of the
+// dashboard. The model, the prompt and the SQL all live server-side; this
+// component never builds SQL and never sees a service account.
+//
+// cfg = {
+//   id, group, navLabel, title, sub, dot,   // optional chrome (sensible defaults)
+//   askFunction,       // default '/.netlify/functions/ask'
+//   requestFunction,   // optional; when set, shows "Add to my dashboard" (US-010)
+//   client,            // client slug, tagged on analytics events
+//   suggestions,       // optional array of example questions rendered as chips
+// }
+const F10_ASK_PALETTE = ['#4b000f', '#fa023c', '#c8a500', '#3a8a2a', '#1565c0', '#8a1538', '#5e35b1', '#00838f'];
+
+function f10AskEscape(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Format a raw value using the viz-spec column/series format, reusing the shared
+// formatters so numbers match the rest of the dashboard.
+function f10AskFormat(value, format){
+  if(format === 'money') return fmtAUDFull(value);
+  if(format === 'roas'){ const x = parseFloat(value); return isNaN(x) ? '—' : fmt(x, 2) + 'x'; }
+  if(format === 'fraction') return fmtPct(n(value) * 100);
+  if(format === 'pct') return fmtPct(value);
+  if(format === 'count') return fmt(value);
+  return f10AskEscape(value);
+}
+
+// Analytics facade (US-011). No-op if the shared F10A facade is not present.
+function f10AskTrack(event, props){
+  try { if(window.F10A && typeof F10A.track === 'function') F10A.track(event, props || {}); } catch(e){ /* analytics is best-effort */ }
+}
+
+// Render a returned viz spec into a host element, only via the shared builders.
+function f10AskRenderResult(hostId, viz){
+  const host = document.getElementById(hostId);
+  if(!host) return;
+  const t = viz.chartType;
+
+  if(t === 'kpi'){
+    const row = (viz.rows && viz.rows[0]) || {};
+    const cards = (viz.columns || []).map(c => kpiCard(c.label, f10AskFormat(row[c.key], c.format))).join('');
+    host.innerHTML = `<div class="kpi-grid">${cards || '<div class="no-data">No data for this question.</div>'}</div>`;
+    return;
+  }
+
+  if(t === 'table'){
+    const tid = hostId + '-tbl';
+    host.innerHTML = `<div class="table-card"><div class="table-card-header">${f10AskEscape(viz.title || 'Result')}</div><div class="table-wrap" id="${tid}"></div></div>`;
+    const headers = (viz.columns || []).map(c => ({ label: c.label, num: !!c.num }));
+    const rows = (viz.rows || []).map(r => (viz.columns || []).map(c => f10AskFormat(r[c.key], c.format)));
+    buildTable(tid, headers, rows);
+    return;
+  }
+
+  // line | bar | combo
+  const cid = hostId + '-cnv';
+  host.innerHTML = `<div class="chart-card"><div class="chart-card-title">${f10AskEscape(viz.title || 'Result')}</div><div class="chart-wrap"><canvas id="${cid}"></canvas></div></div>`;
+  const labels = (viz.rows || []).map(r => r[viz.x.key]);
+  const series = (viz.series || []).map((s, i) => ({
+    label: s.label, data: (viz.rows || []).map(r => n(r[s.key])),
+    kind: s.kind === 'bar' ? 'bar' : 'line', axis: s.axis || 'cur', color: F10_ASK_PALETTE[i % F10_ASK_PALETTE.length],
+  }));
+  if(t === 'combo'){ f10ComboChart(cid, labels, series, {}); return; }
+  makeChart(cid, {
+    type: t === 'bar' ? 'bar' : 'line',
+    data: { labels, datasets: series.map(s => ({ label: s.label, data: s.data, borderColor: s.color, backgroundColor: s.color, tension: 0.25, fill: false, spanGaps: true })) },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: series.length > 1, position: 'bottom' } } },
+  });
+}
+
+function f10AskTab(cfg){
+  const id = cfg.id || 'ask';
+  const endpoint = cfg.askFunction || '/.netlify/functions/ask';
+  const suggestions = cfg.suggestions || [];
+
+  const chips = suggestions.map(s => `<button type="button" class="ask-chip" data-q="${f10AskEscape(s)}">${f10AskEscape(s)}</button>`).join('');
+  const body = `
+    <div class="ask-wrap">
+      <div class="ask-input-row">
+        <input id="${id}-q" class="ask-input" type="text" autocomplete="off" placeholder="Ask a question about your data, e.g. spend by platform last month" />
+        <button id="${id}-go" class="ask-btn" type="button">Ask</button>
+      </div>
+      ${chips ? `<div id="${id}-suggestions" class="ask-suggestions">${chips}</div>` : ''}
+      <div id="${id}-status" class="ask-status" role="status" aria-live="polite"></div>
+      <div id="${id}-meta" class="ask-meta"></div>
+      <div id="${id}-result" class="ask-result"></div>
+      <div id="${id}-actions" class="ask-actions"></div>
+    </div>`;
+
+  async function submit(question){
+    question = (question || '').trim();
+    if(!question) return;
+    const statusEl = document.getElementById(id + '-status');
+    const metaEl = document.getElementById(id + '-meta');
+    const resultEl = document.getElementById(id + '-result');
+    const actionsEl = document.getElementById(id + '-actions');
+    metaEl.innerHTML = ''; resultEl.innerHTML = ''; actionsEl.innerHTML = '';
+    statusEl.className = 'ask-status loading';
+    statusEl.textContent = 'Thinking...';
+    f10AskTrack('ask.submitted', { client: cfg.client, question });
+
+    let data;
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+      try { data = await res.json(); } catch { data = null; }
+      if(!res.ok || !data || !data.vizSpec) throw new Error((data && data.error) || 'Could not answer that question.');
+    } catch(err){
+      statusEl.className = 'ask-status error';
+      statusEl.textContent = (err && err.message) ? err.message : 'Something went wrong answering that question.';
+      f10AskTrack('ask.error', { client: cfg.client, question, message: err && err.message });
+      return;
+    }
+
+    statusEl.className = 'ask-status'; statusEl.textContent = '';
+    const viz = data.vizSpec;
+    f10AskRenderResult(id + '-result', viz);
+
+    const dr = viz.dateRange ? `${viz.dateRange.start} to ${viz.dateRange.end}` : '';
+    metaEl.innerHTML = `${viz.interpretation ? `<div class="ask-interpretation"></div>` : ''}` +
+      `<div class="ask-facts">${dr ? `<span>Period: ${f10AskEscape(dr)}</span>` : ''}<span>Rows: ${n(viz.rowCount)}</span></div>`;
+    if(viz.interpretation){ const el = metaEl.querySelector('.ask-interpretation'); if(el) el.textContent = viz.interpretation; }
+    f10AskTrack('ask.result_rendered', { client: cfg.client, question, chartType: viz.chartType, rowCount: n(viz.rowCount) });
+
+    // "Add to my dashboard" — the server side is US-010; shown only when configured.
+    if(cfg.requestFunction){
+      actionsEl.innerHTML = `<button type="button" class="ask-request-btn" id="${id}-req">Add to my dashboard</button><span id="${id}-req-note" class="ask-req-note"></span>`;
+      const reqBtn = document.getElementById(id + '-req');
+      if(reqBtn) reqBtn.addEventListener('click', () => requestToDashboard(question, data));
+    }
+  }
+
+  async function requestToDashboard(question, data){
+    const note = document.getElementById(id + '-req-note');
+    const btn = document.getElementById(id + '-req');
+    if(btn) btn.disabled = true;
+    if(note) note.textContent = 'Requesting...';
+    f10AskTrack('ask.add_to_dashboard_requested', { client: cfg.client, question });
+    try {
+      const res = await fetch(cfg.requestFunction, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, sql: data.request && data.request.sql, vizSpec: data.vizSpec }),
+      });
+      const out = await res.json().catch(() => null);
+      if(!res.ok || !out) throw new Error((out && out.error) || 'Request failed.');
+      if(note) note.innerHTML = out.issueUrl
+        ? `Requested — <a href="${f10AskEscape(out.issueUrl)}" target="_blank" rel="noopener">view request</a>`
+        : 'Requested.';
+    } catch(err){
+      if(btn) btn.disabled = false;
+      if(note) note.textContent = (err && err.message) ? err.message : 'Request failed.';
+    }
+  }
+
+  function load(){
+    const input = document.getElementById(id + '-q');
+    const go = document.getElementById(id + '-go');
+    if(go) go.addEventListener('click', () => submit(input ? input.value : ''));
+    if(input) input.addEventListener('keydown', (e) => { if(e.key === 'Enter') submit(input.value); });
+    const sugg = document.getElementById(id + '-suggestions');
+    if(sugg) sugg.querySelectorAll('.ask-chip').forEach(chip => {
+      chip.addEventListener('click', () => { const q = chip.getAttribute('data-q'); if(input) input.value = q; submit(q); });
+    });
+  }
+
+  return {
+    id,
+    group: cfg.group || 'Ask',
+    navLabel: cfg.navLabel || 'Ask',
+    dot: cfg.dot || '#4b000f',
+    title: cfg.title || 'Ask your data',
+    sub: cfg.sub || 'Type a question and get a chart or table, built live from your data.',
+    body,
+    load,
+  };
+}
