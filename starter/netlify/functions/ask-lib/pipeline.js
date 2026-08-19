@@ -67,7 +67,7 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   } else {
     if (!clients.geminiFallbackSql) throw badRequest('question could not be answered from the semantic model');
     const raw = await safe(() => clients.geminiFallbackSql(question));
-    if (!raw) { const e = new Error('cannot answer this question'); e.status = 422; throw e; }
+    if (!raw) { const e = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.'); e.status = 422; throw e; }
     guard.assertSelectOnly(raw);
     sql = guard.ensureLimit(raw, maxRows);
     path = 'fallback-sql';
