@@ -56,6 +56,16 @@ function subMonthsIso(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
+/* Does the question ask for a time series (a breakdown over time)? Used to avoid
+ * matching a curated question that has no grain when the user clearly wants one. */
+function wantsTimeSeries(question) {
+  const s = String(question || '').toLowerCase();
+  return /\bover time\b/.test(s)
+    || /\btrend(s|ing)?\b/.test(s)
+    || /\b(daily|weekly|monthly|quarterly)\b/.test(s)
+    || /\b(by|per|each|broken down by|split by)\s+(day|week|month|quarter)\b/.test(s);
+}
+
 /* Does the question itself name a time period? If so we let that drive the range
  * (via the model), rather than a curated default or the dashboard's picker. */
 function hasExplicitDateRange(question) {
@@ -250,6 +260,10 @@ function buildQuery(model, spec, opts = {}) {
 /* ── viz spec: what the framework renders through its shared builders ── */
 
 function pickChartType(spec, ctx) {
+  // A breakdown over time (dimension + grain) pivots the dimension into one line
+  // per value across the time buckets. This is the "spend by age band over weeks"
+  // shape; it takes precedence over an explicit viz that cannot express it.
+  if (ctx.grain && ctx.dimId) return 'pivot';
   if (spec.viz) return spec.viz;
   if (ctx.grain) return 'combo';
   if (ctx.dimId) return 'table';
@@ -278,7 +292,13 @@ function buildVizSpec(model, spec, ctx, rows) {
     rows: rows || [],
   };
 
-  if (chartType === 'kpi') {
+  if (chartType === 'pivot') {
+    // One line per dimension value across the time buckets, for a single metric.
+    const primary = metricCols[0];
+    base.x = { key: 'bucket', label: grainLabel(ctx.grain) };
+    base.pivot = { key: 'dim', label: src.dimensions[ctx.dimId].label };
+    base.metric = { key: primary.key, label: primary.label, format: primary.format, invert: primary.invert };
+  } else if (chartType === 'kpi') {
     base.columns = metricCols;
   } else if (chartType === 'table') {
     const cols = [];
@@ -317,6 +337,10 @@ function interpret(model, spec, ctx, rows) {
   if (!rows || !rows.length) return `No ${src.label.toLowerCase()} data for ${ctx.start} to ${ctx.end}.`;
   const primary = ctx.metricIds[0];
   const label = src.metrics[primary] ? src.metrics[primary].label : primary;
+  if (ctx.grain && ctx.dimId) {
+    const groups = [...new Set(rows.map(r => r.dim))].length;
+    return `${label} by ${src.dimensions[ctx.dimId].label.toLowerCase()} over ${grainLabel(ctx.grain).toLowerCase()}s (${groups} groups), ${ctx.start} to ${ctx.end}.`;
+  }
   if (ctx.dimId && rows[0] && rows[0].dim != null) {
     const top = rows[0];
     return `Top ${src.dimensions[ctx.dimId].label.toLowerCase()} by ${label.toLowerCase()} for ${ctx.start} to ${ctx.end}: ${top.dim} (${formatValue(top[primary], src.metrics[primary].format)}).`;
@@ -369,7 +393,7 @@ function resolveCurated(model, question, opts = {}) {
 
 module.exports = {
   sqlStr, isIsoDate, addDaysIso, subMonthsIso, resolveDateRange, comparisonWindows, gGroup,
-  hasExplicitDateRange,
+  hasExplicitDateRange, wantsTimeSeries,
   validateModel, clampLimit, filterClause, buildQuery,
   pickChartType, buildVizSpec, buildTitle, interpret, formatValue,
   resolveQuestion, resolveCurated,

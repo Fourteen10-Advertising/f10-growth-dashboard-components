@@ -636,6 +636,25 @@
           "dir": "desc"
         }
       }
+    },
+    {
+      "id": "age_over_time",
+      "match": [
+        "spend by age over time",
+        "age over time",
+        "spend by age by week",
+        "age trend over time",
+        "by age group over time",
+        "breakdown by age over time"
+      ],
+      "spec": {
+        "source": "age",
+        "metrics": [
+          "spend"
+        ],
+        "dimension": "age_band",
+        "grain": "week"
+      }
     }
   ],
   "warehouse": {

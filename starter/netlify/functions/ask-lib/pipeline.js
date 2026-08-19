@@ -45,17 +45,29 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   // ── 1/2. Resolve to either a curated spec (+ built SQL) or a fallback SQL ──
   let path = null, spec = null, built = null, sql = null;
 
-  // Skip the fixed curated matcher when the question names its own time period,
-  // so an explicit range ("last 6 months") reaches the range-aware model path.
-  const det = resolve.hasExplicitDateRange(question) ? null : resolve.resolveQuestion(model, question);
+  // Skip the fixed curated matcher when the question names its own time period
+  // ("last 6 months"), so the range-aware model path handles it. Also skip a
+  // matched question that has no grain when the user clearly wants a time series
+  // ("by week", "over time"), so it becomes a proper breakdown-over-time.
+  let det = null;
+  if (!resolve.hasExplicitDateRange(question)) {
+    const cand = resolve.resolveQuestion(model, question);
+    if (cand && !(resolve.wantsTimeSeries(question) && !(cand.spec && cand.spec.grain))) det = cand;
+  }
   if (det) { path = 'curated-deterministic'; spec = det.spec; }
 
+  // Track a model/infra failure separately from "the model had no answer", so a
+  // broken model (e.g. a bad model id) surfaces loudly instead of masquerading as
+  // "cannot answer" on every question.
+  let modelError = null;
   if (!spec && clients.geminiSpec) {
-    const mapped = await safe(() => clients.geminiSpec(question));
-    if (mapped && mapped.curated && mapped.spec) {
-      try { resolve.buildQuery(model, mapped.spec, { today }); spec = mapped.spec; path = 'curated-gemini'; }
-      catch { /* invalid spec -> fall through to text-to-SQL */ }
-    }
+    try {
+      const mapped = await clients.geminiSpec(question);
+      if (mapped && mapped.curated && mapped.spec) {
+        try { resolve.buildQuery(model, mapped.spec, { today }); spec = mapped.spec; path = 'curated-gemini'; }
+        catch { /* invalid spec -> fall through to text-to-SQL */ }
+      }
+    } catch (e) { modelError = e; }
   }
 
   if (spec) {
@@ -66,25 +78,52 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
     sql = built.sql;
   } else {
     if (!clients.geminiFallbackSql) throw badRequest('question could not be answered from the semantic model');
-    const raw = await safe(() => clients.geminiFallbackSql(question));
-    if (!raw) { const e = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.'); e.status = 422; throw e; }
+    let raw = null;
+    try { raw = await clients.geminiFallbackSql(question); }
+    catch (e) { modelError = e; }
+    if (!raw) {
+      if (modelError) {
+        // Infra problem (model unavailable/misconfigured): surface it, do not
+        // pretend the question was unanswerable.
+        const e = new Error('The AI model is unavailable right now. Please try again shortly.');
+        e.status = 503; e.cause = modelError.message; throw e;
+      }
+      const e = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.');
+      e.status = 422; throw e;
+    }
     guard.assertSelectOnly(raw);
     sql = guard.ensureLimit(raw, maxRows);
     path = 'fallback-sql';
   }
 
   // ── 3. The single gate: dry-run, allowlist, bytes cap ──
-  // A dry-run failure means the query is invalid against the schema (e.g. a
-  // breakdown the data does not support, like age crossed with a column that
-  // only exists on another table). That is a "can't answer", not a server error.
+  // A dry-run failure means the query is invalid against the schema. For a
+  // model-generated fallback we give the model one chance to fix it from the
+  // error (self-repair). If it still fails, that is a clean "can't answer", not a
+  // server error.
   let dry;
   try {
     dry = await clients.dryRun(sql);
-  } catch (e) {
-    const err = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.');
-    err.status = 422;
-    err.cause = e && e.message;
-    throw err;
+  } catch (e1) {
+    let repaired = false;
+    if (path === 'fallback-sql' && clients.geminiFixSql) {
+      let fixed = null;
+      try { fixed = await clients.geminiFixSql(question, sql, e1.message); } catch { /* ignore */ }
+      if (fixed) {
+        try {
+          guard.assertSelectOnly(fixed);
+          const fixedSql = guard.ensureLimit(fixed, maxRows);
+          dry = await clients.dryRun(fixedSql);
+          sql = fixedSql; path = 'fallback-sql-repaired'; repaired = true;
+        } catch { /* repair failed -> fall through to clean 422 */ }
+      }
+    }
+    if (!repaired) {
+      const err = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.');
+      err.status = 422;
+      err.cause = e1 && e1.message;
+      throw err;
+    }
   }
   guard.assertReferencedTables(dry.referencedTables, model.datasets, model.project);
   const bytes = guard.checkBytes(dry.totalBytesProcessed, maxBytes);
