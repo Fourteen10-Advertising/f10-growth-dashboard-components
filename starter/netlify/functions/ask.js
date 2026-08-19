@@ -95,15 +95,15 @@ exports.handler = async (event) => {
         project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: gemini.buildSpecSystemPrompt(MODEL, today), prompt: q, json: true,
       })),
-      geminiFallbackSql: async (q) => gemini.generate(token, {
+      geminiFallback: async (q) => gemini.parseJson(await gemini.generate(token, {
         project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
-        system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }), prompt: q, json: false,
-      }),
-      geminiFixSql: async (q, badSql, errorMsg) => gemini.generate(token, {
+        system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }), prompt: q, json: true,
+      })),
+      geminiFix: async (q, badSql, errorMsg) => gemini.parseJson(await gemini.generate(token, {
         project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: gemini.buildFallbackSqlSystemPrompt(MODEL, { today, defaultRange: defaultDateRange }),
-        prompt: gemini.buildFixSqlPrompt(q, badSql, errorMsg), json: false,
-      }),
+        prompt: gemini.buildFixSqlPrompt(q, badSql, errorMsg), json: true,
+      })),
       geminiInterpret: async (q, vizSpec, rows) => gemini.generate(token, {
         project: PROJECT, location: GEMINI_LOCATION, model: GEMINI_MODEL,
         system: 'You are a marketing analyst writing a short, plain interpretation for a client.',

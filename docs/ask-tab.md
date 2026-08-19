@@ -46,6 +46,10 @@ and explicit dates.
   builders. Table and dimension values are HTML-escaped.
 - The plain-English interpretation, the date range, and the row count.
 - A tidy inline error (never a broken layout) when the ask function fails.
+- Charts for long-tail questions too: the guarded fallback returns a chart
+  descriptor alongside its SQL, so "compare X and Y over time" or "AOV and CPA by
+  month" render as line/pivot charts (with readable month labels), not just a
+  table. Multi-value comparisons use an `IN` filter, not one filter per value.
 - The "Add to my dashboard" action when `requestFunction` is set (US-010).
 
 ## Analytics funnel (US-011)

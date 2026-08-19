@@ -31,7 +31,7 @@ function fakeClients(over = {}) {
       { dim: 'gads', spend: '800', conversions: '40', cpa: '20', revenue: '3200', roas: '4' },
     ],
     geminiSpec: async () => ({ curated: false }),
-    geminiFallbackSql: async () => 'SELECT 1',
+    geminiFallback: async () => ({ sql: 'SELECT 1', viz: null }),
     ...over,
   };
 }
@@ -79,7 +79,7 @@ test('curated Gemini path is used when deterministic misses but a valid spec com
 test('guarded text-to-SQL fallback runs when there is no curated match', async () => {
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: false, reason: 'novel' }),
-    geminiFallbackSql: async () => 'SELECT campaign_name, SUM(spend) AS spend FROM `mcc-poc-477801.fastcover_marts.meta_campaign_daily` GROUP BY campaign_name',
+    geminiFallback: async () => ({ sql: 'SELECT campaign_name, SUM(spend) AS spend FROM `mcc-poc-477801.fastcover_marts.meta_campaign_daily` GROUP BY campaign_name', viz: { chartType: 'table', columns: [{ key: 'campaign_name', label: 'Campaign' }, { key: 'spend', label: 'Spend', format: 'money', num: true }] } }),
     dryRun: async () => ({ referencedTables: refs('fastcover_marts', 'meta_campaign_daily'), totalBytesProcessed: 2000 }),
     parseRows: () => [{ campaign_name: 'Brand', spend: '900' }, { campaign_name: 'Generic', spend: '400' }],
   });
@@ -89,10 +89,27 @@ test('guarded text-to-SQL fallback runs when there is no curated match', async (
   assert.equal(res.vizSpec.chartType, 'table');
 });
 
+test('fallback renders a chart from the model viz descriptor (pivot over time)', async () => {
+  const clients = fakeClients({
+    geminiSpec: async () => ({ curated: false }),
+    geminiFallback: async () => ({
+      sql: "SELECT FORMAT_DATE('%Y-%m', DATE_TRUNC(date_start, MONTH)) AS month, platform, SAFE_DIVIDE(SUM(spend),SUM(conversions)) AS cpa FROM `mcc-poc-477801.fastcover_marts.gads_campaign_daily` GROUP BY month, platform",
+      viz: { chartType: 'pivot', x: { key: 'month', label: 'Month' }, pivot: { key: 'platform', label: 'Platform' }, metric: { key: 'cpa', label: 'CPA', format: 'money' } },
+    }),
+    dryRun: async () => ({ referencedTables: refs('fastcover_marts', 'gads_campaign_daily'), totalBytesProcessed: 100 }),
+    parseRows: () => [{ month: '2026-01', platform: 'gads', cpa: '40' }, { month: '2026-02', platform: 'gads', cpa: '42' }],
+  });
+  const res = await runAsk({ model, question: 'chart cpa on google by month', today: TODAY, clients });
+  assert.equal(res.meta.path, 'fallback-sql');
+  assert.equal(res.vizSpec.chartType, 'pivot');
+  assert.equal(res.vizSpec.metric.key, 'cpa');
+  assert.equal(res.vizSpec.x.key, 'month');
+});
+
 test('injection: a fallback query that references another dataset is refused at the gate', async () => {
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: false }),
-    geminiFallbackSql: async () => 'SELECT * FROM `mcc-poc-477801.bridgit_marts.meta_campaign_daily`',
+    geminiFallback: async () => ({ sql: 'SELECT * FROM `mcc-poc-477801.bridgit_marts.meta_campaign_daily`', viz: null }),
     // The dry-run truthfully reports the out-of-scope table (as it would live).
     dryRun: async () => ({ referencedTables: refs('bridgit_marts', 'meta_campaign_daily'), totalBytesProcessed: 100 }),
   });
@@ -106,8 +123,8 @@ test('a fallback dry-run failure triggers one-shot self-repair', async () => {
   let dryCalls = 0;
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: false }),
-    geminiFallbackSql: async () => 'SELECT DATE_TRUNC(date, WEEK) FROM `mcc-poc-477801.fastcover_marts.age_gender_daily`',
-    geminiFixSql: async () => 'SELECT DATE_TRUNC(date, WEEK(MONDAY)) AS bucket, SUM(spend) AS spend FROM `mcc-poc-477801.fastcover_marts.age_gender_daily` GROUP BY bucket',
+    geminiFallback: async () => ({ sql: 'SELECT DATE_TRUNC(date, WEEK) FROM `mcc-poc-477801.fastcover_marts.age_gender_daily`', viz: null }),
+    geminiFix: async () => ({ sql: 'SELECT DATE_TRUNC(date, WEEK(MONDAY)) AS bucket, SUM(spend) AS spend FROM `mcc-poc-477801.fastcover_marts.age_gender_daily` GROUP BY bucket', viz: null }),
     dryRun: async () => { dryCalls++; if (dryCalls === 1) throw new Error('Unrecognized name: WEEK'); return { referencedTables: refs('fastcover_marts', 'age_gender_daily'), totalBytesProcessed: 100 }; },
     parseRows: () => [{ bucket: '2026-07-06', spend: '100' }],
   });
@@ -119,7 +136,7 @@ test('a fallback dry-run failure triggers one-shot self-repair', async () => {
 test('a model/infra failure surfaces as 503, not a masked 422', async () => {
   const clients = fakeClients({
     geminiSpec: async () => { throw new Error('Publisher model gemini-x not found'); },
-    geminiFallbackSql: async () => { throw new Error('Publisher model gemini-x not found'); },
+    geminiFallback: async () => { throw new Error('Publisher model gemini-x not found'); },
   });
   await assert.rejects(
     runAsk({ model, question: 'a novel unmapped question about widgets', today: TODAY, clients }),
@@ -130,7 +147,7 @@ test('a model/infra failure surfaces as 503, not a masked 422', async () => {
 test('a genuine no-answer (model returns empty, no error) is a 422', async () => {
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: false }),
-    geminiFallbackSql: async () => '',
+    geminiFallback: async () => null,
   });
   await assert.rejects(
     runAsk({ model, question: 'a novel unmapped question about widgets', today: TODAY, clients }),
@@ -158,7 +175,7 @@ test('a fallback DML statement is rejected before any dry-run', async () => {
   let dryRunCalled = false;
   const clients = fakeClients({
     geminiSpec: async () => ({ curated: false }),
-    geminiFallbackSql: async () => 'DELETE FROM `mcc-poc-477801.fastcover_marts.meta_campaign_daily`',
+    geminiFallback: async () => ({ sql: 'DELETE FROM `mcc-poc-477801.fastcover_marts.meta_campaign_daily`', viz: null }),
     dryRun: async () => { dryRunCalled = true; return { referencedTables: [], totalBytesProcessed: 0 }; },
   });
   await assert.rejects(runAsk({ model, question: 'delete everything', today: TODAY, clients }), (e) => e.code === 'UNSAFE_SQL');

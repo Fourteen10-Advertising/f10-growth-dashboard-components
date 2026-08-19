@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import resolve from './resolve.js';
-const { validateModel, buildQuery, buildVizSpec, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange, wantsTimeSeries } = resolve;
+const { validateModel, buildQuery, buildVizSpec, buildFallbackViz, resolveQuestion, resolveCurated, resolveDateRange, hasExplicitDateRange, wantsTimeSeries } = resolve;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const model = JSON.parse(readFileSync(join(here, 'models', 'fastcover.json'), 'utf8'));
@@ -81,6 +81,15 @@ test('filter values are single-quote escaped', () => {
     filters: [{ dimension: 'campaign', value: "O'Brien Brand" }],
   }, { today: TODAY });
   assert.match(built.sql, /campaign_name = 'O''Brien Brand'/);
+});
+
+test('a multi-value filter becomes an IN clause (compare A and B)', () => {
+  const built = buildQuery(model, { source: 'blended', metrics: ['cpa'], dimension: 'platform', grain: 'month', filters: [{ dimension: 'platform', value: ['gads', 'meta'] }] }, { today: TODAY });
+  assert.match(built.sql, /platform IN \('gads', 'meta'\)/);
+});
+
+test('a multi-value filter validates every value against the allowlist', () => {
+  assert.throws(() => buildQuery(model, { source: 'blended', metrics: ['cpa'], dimension: 'platform', filters: [{ dimension: 'platform', value: ['gads', 'google'] }] }, { today: TODAY }), /not allowed for platform/);
 });
 
 test('a filter value outside the model allowlist is rejected', () => {
@@ -169,6 +178,22 @@ test('a dimension + grain produces a pivot viz (one series per value over time)'
   assert.equal(viz.pivot.key, 'dim');
   assert.equal(viz.metric.key, 'spend');
   assert.equal(viz.rowCount, 2);
+});
+
+test('buildFallbackViz builds a chart from a model descriptor, or null when unusable', () => {
+  const pivot = buildFallbackViz(
+    { chartType: 'pivot', x: { key: 'month', label: 'Month' }, pivot: { key: 'platform', label: 'Platform' }, metric: { key: 'cpa', label: 'CPA', format: 'money' } },
+    [{ month: '2026-01', platform: 'gads', cpa: '40' }], { title: 't', dateRange: null });
+  assert.equal(pivot.chartType, 'pivot');
+  assert.equal(pivot.metric.format, 'money');
+  assert.equal(pivot.rowCount, 1);
+  const line = buildFallbackViz(
+    { chartType: 'line', x: { key: 'month', label: 'Month' }, series: [{ key: 'aov', label: 'AOV', format: 'money' }, { key: 'cpa', label: 'CPA', format: 'money' }] },
+    [{ month: '2026-01', aov: '400', cpa: '80' }], {});
+  assert.equal(line.chartType, 'line');
+  assert.equal(line.series.length, 2);
+  assert.equal(buildFallbackViz(null, [], {}), null);
+  assert.equal(buildFallbackViz({ chartType: 'pivot' }, [], {}), null); // missing x/pivot/metric
 });
 
 test('a time-series spec produces a bucketed, ordered query and a combo viz', () => {
