@@ -117,8 +117,12 @@ exports.handler = async (event) => {
     CACHE.set(cacheKey, payload);
     return json(event, 200, payload);
   } catch (err) {
-    const status = (err && err.status) || 500;
-    console.error('[ask] error:', err && err.message ? err.message : err);
+    // Guard refusals (unsafe SQL / out-of-scope table) are safe 4xx, not 500.
+    let status = (err && err.status) || 0;
+    if (!status && err && (err.code === 'UNSAFE_SQL' || err.code === 'OUT_OF_SCOPE_TABLE')) status = 400;
+    if (!status) status = 500;
+    // Log the message plus any underlying cause (e.g. the BigQuery dry-run error).
+    console.error('[ask] error:', err && err.message ? err.message : err, err && err.cause ? '| cause: ' + err.cause : '');
     // 4xx carry a safe, non-leaky reason; 5xx stay generic.
     const message = status >= 400 && status < 500
       ? (err.message || 'This question could not be answered.')

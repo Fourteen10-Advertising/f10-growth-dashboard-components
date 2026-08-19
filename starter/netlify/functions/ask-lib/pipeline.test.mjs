@@ -102,6 +102,22 @@ test('injection: a fallback query that references another dataset is refused at 
   );
 });
 
+test('a dry-run failure (invalid/unsupported query) is a clean 422, not a 500', async () => {
+  const clients = fakeClients({ dryRun: async () => { throw new Error('Unrecognized name: age at [3:5]'); } });
+  await assert.rejects(
+    runAsk({ model, question: 'spend by platform', today: TODAY, clients }),
+    (e) => e.status === 422,
+  );
+});
+
+test('an execution failure is a clean 422, not a 500', async () => {
+  const clients = fakeClients({ runQuery: async () => { throw new Error('BigQuery execution error'); } });
+  await assert.rejects(
+    runAsk({ model, question: 'spend by platform', today: TODAY, clients }),
+    (e) => e.status === 422,
+  );
+});
+
 test('a fallback DML statement is rejected before any dry-run', async () => {
   let dryRunCalled = false;
   const clients = fakeClients({
