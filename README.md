@@ -255,7 +255,34 @@ tabs: [
 Targets are full-month figures; the tab prorates them
 (`expected_to_date = target * days_elapsed / days_in_month`). Spend and revenue
 pace independently, and over-pacing on spend reads as a caution (amber), not a
-win. Pace bands: below 0.9 behind/under, 0.9–1.1 on-track, above 1.1 ahead/over.
+win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
+
+## Ask tab (AI explorer)
+
+### `f10AskTab(cfg)`
+
+Returns a tab object to spread into `config.tabs`. It renders a question box and
+shows the answer that a server-side `ask` Netlify function returns as a typed viz
+spec, drawn only through the shared builders (`kpiCard`, `buildTable`,
+`makeChart`, `f10ComboChart`), so answers look like the rest of the dashboard. The
+model, the prompt and the SQL all live server-side; the component never builds SQL
+and never sees a service account.
+
+```js
+f10AskTab({
+  client: 'fastcover',                                  // tagged on analytics
+  requestFunction: '/.netlify/functions/ask-request',   // enables "Add to my dashboard"
+  suggestions: ['spend by platform', 'spend trend by week', 'top meta campaigns'],
+})
+```
+
+The server side lives in `starter/netlify/functions/`: `ask.js` (the hybrid
+curated-first Gemini pipeline), `ask-request.js` (the GitHub issue flow), and the
+`ask-lib/` library (resolver, query guard, BigQuery and Gemini clients, cache,
+rate limiter, log). Each client copies these like `bq.js` and drops in its own
+`semantic-model.json`. See `docs/semantic-model.md` and `docs/ask-tab.md` for the
+semantic model, the viz-spec contract, and the analytics funnel, and
+`ask-lib/README.md` for per-site setup and env.
 
 ## Theming / branding
 
