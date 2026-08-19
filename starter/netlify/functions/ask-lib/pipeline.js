@@ -67,20 +67,39 @@ async function runAsk({ model, question, today, clients, logger, defaultDateRang
   } else {
     if (!clients.geminiFallbackSql) throw badRequest('question could not be answered from the semantic model');
     const raw = await safe(() => clients.geminiFallbackSql(question));
-    if (!raw) { const e = new Error('cannot answer this question'); e.status = 422; throw e; }
+    if (!raw) { const e = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.'); e.status = 422; throw e; }
     guard.assertSelectOnly(raw);
     sql = guard.ensureLimit(raw, maxRows);
     path = 'fallback-sql';
   }
 
   // ── 3. The single gate: dry-run, allowlist, bytes cap ──
-  const dry = await clients.dryRun(sql);
+  // A dry-run failure means the query is invalid against the schema (e.g. a
+  // breakdown the data does not support, like age crossed with a column that
+  // only exists on another table). That is a "can't answer", not a server error.
+  let dry;
+  try {
+    dry = await clients.dryRun(sql);
+  } catch (e) {
+    const err = new Error('I could not answer that from the available data. Try a simpler breakdown or a different question.');
+    err.status = 422;
+    err.cause = e && e.message;
+    throw err;
+  }
   guard.assertReferencedTables(dry.referencedTables, model.datasets, model.project);
   const bytes = guard.checkBytes(dry.totalBytesProcessed, maxBytes);
-  if (!bytes.ok) { const e = new Error('query would scan too much data; narrow the date range'); e.status = 413; throw e; }
+  if (!bytes.ok) { const e = new Error('That query would scan too much data. Narrow the date range and try again.'); e.status = 413; throw e; }
 
   // ── execute ──
-  const data = await clients.runQuery(sql, { maxBytes, maxResults: maxRows });
+  let data;
+  try {
+    data = await clients.runQuery(sql, { maxBytes, maxResults: maxRows });
+  } catch (e) {
+    const err = new Error('I could not answer that from the available data. Try rephrasing the question.');
+    err.status = 422;
+    err.cause = e && e.message;
+    throw err;
+  }
   const rows = clients.parseRows(data);
 
   // ── viz spec ──

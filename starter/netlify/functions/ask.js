@@ -17,7 +17,7 @@
  *     (from the framework's ask/models/<client>.json).
  *   - Set GOOGLE_SERVICE_ACCOUNT to the client's SCOPED service account JSON.
  *   - Optional env: BQ_PROJECT_ID (default mcc-poc-477801),
- *     ASK_GEMINI_MODEL (default gemini-2.5-flash),
+ *     ASK_GEMINI_MODEL (default gemini-3.5-flash),
  *     ASK_LOCATION (default australia-southeast1),
  *     ALLOWED_ORIGIN (CORS lock, same as bq.js).
  */
@@ -33,7 +33,7 @@ const { makeLogger } = require('./ask-lib/log.js');
 
 const PROJECT = process.env.BQ_PROJECT_ID || 'mcc-poc-477801';
 const LOCATION = process.env.ASK_LOCATION || 'australia-southeast1';
-const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.ASK_GEMINI_MODEL || 'gemini-3.5-flash';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const LOG_TABLE = process.env.ASK_LOG_TABLE || ''; // e.g. dashboard_ops.dashboard_ai_log
 
@@ -117,8 +117,12 @@ exports.handler = async (event) => {
     CACHE.set(cacheKey, payload);
     return json(event, 200, payload);
   } catch (err) {
-    const status = (err && err.status) || 500;
-    console.error('[ask] error:', err && err.message ? err.message : err);
+    // Guard refusals (unsafe SQL / out-of-scope table) are safe 4xx, not 500.
+    let status = (err && err.status) || 0;
+    if (!status && err && (err.code === 'UNSAFE_SQL' || err.code === 'OUT_OF_SCOPE_TABLE')) status = 400;
+    if (!status) status = 500;
+    // Log the message plus any underlying cause (e.g. the BigQuery dry-run error).
+    console.error('[ask] error:', err && err.message ? err.message : err, err && err.cause ? '| cause: ' + err.cause : '');
     // 4xx carry a safe, non-leaky reason; 5xx stay generic.
     const message = status >= 400 && status < 500
       ? (err.message || 'This question could not be answered.')
