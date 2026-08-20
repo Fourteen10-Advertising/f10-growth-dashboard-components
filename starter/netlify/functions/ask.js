@@ -112,7 +112,9 @@ exports.handler = async (event) => {
     };
 
     // Every ask writes a log row (client, question, path, sql, bytes, rows,
-    // latency, outcome, ts) so demand can be mined; no-op if ASK_LOG_TABLE unset.
+    // latency, outcome, error, ts) so demand can be mined — including the asks
+    // that fail (outcome != 'ok'), which are the gaps worth building. No-op if
+    // ASK_LOG_TABLE unset.
     const logger = makeLogger({ project: PROJECT, token, table: LOG_TABLE, client: MODEL.client });
     const { vizSpec, meta } = await runAsk({ model: MODEL, question, today, clients, logger, defaultDateRange });
 
