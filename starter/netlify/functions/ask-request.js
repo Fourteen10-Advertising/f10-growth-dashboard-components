@@ -55,7 +55,11 @@ exports.handler = async (event) => {
     if (MODEL && process.env.GOOGLE_SERVICE_ACCOUNT) {
       const sa = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
       if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, '\n');
-      const token = await bq.bqReadonlyToken(sa);
+      // A dry-run creates a BigQuery job, which the read-only scope cannot do
+      // ("insufficient authentication scopes"). Use the full bigquery scope,
+      // matching the working ask function. IAM (dataViewer + jobUser on the
+      // scoped SA) remains the real access boundary.
+      const token = await bq.getAccessToken(sa, 'https://www.googleapis.com/auth/bigquery');
       const dry = await bq.dryRun(PROJECT, token, safeSql, LOCATION);
       guard.assertReferencedTables(dry.referencedTables, MODEL.datasets, MODEL.project || PROJECT);
     }
