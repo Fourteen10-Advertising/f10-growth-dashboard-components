@@ -379,13 +379,33 @@ function f10PacingTab(cfg){
   const channelField = a.channelField || 'channel';
   const spendCol = a.spend || 'spend';
   const revCol = a.revenue || 'revenue';
+  // Optional group-level breakdown. When byGroup is set and the actuals table has a
+  // group column (actuals.groupField), the status table nests group rows under each
+  // platform with a platform subtotal, while KPIs and charts stay blended. Targets are
+  // keyed by platform + group_name instead of summed to platform. Fully backward-
+  // compatible: without byGroup the output is exactly the platform-level view.
+  const byGroup = !!cfg.byGroup && !!a.groupField;
+  const groupField = a.groupField;
+  const PRETTY = { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn', bing: 'Bing', tiktok: 'TikTok', reddit: 'Reddit' };
+  const prettyPlat = ch => PRETTY[String(ch).toLowerCase()] || ch;
 
   async function load(){
     const host = document.getElementById(id + '-body');
     if(!host) return;
 
     const targetsSQL = `SELECT FORMAT_DATE('%Y-%m-%d', month) AS month, platform, group_name, target_spend, target_revenue FROM \`${cfg.targetsTable}\``;
-    const actualsSQL = `
+    const actualsSQL = byGroup ? `
+      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      SELECT ${channelField} AS channel,
+             ${groupField} AS grp,
+             FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
+             CAST((SELECT d FROM latest) AS STRING) AS latest_date,
+             ROUND(SUM(${spendCol}), 2) AS spend,
+             ROUND(SUM(${revCol}), 2) AS revenue
+      FROM \`${a.table}\`
+      WHERE ${dateField} >= DATE_TRUNC((SELECT d FROM latest), MONTH)
+        AND ${dateField} <= (SELECT d FROM latest)
+      GROUP BY channel, grp, date` : `
       WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
       SELECT ${channelField} AS channel,
              FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
@@ -404,38 +424,75 @@ function f10PacingTab(cfg){
     const currentMonth = startOfMonth(latest);
     const dim = new Date(Date.UTC(+latest.slice(0, 4), +latest.slice(5, 7), 0)).getUTCDate();
     const elapsed = +latest.slice(8, 10);
+    const frac = dim ? elapsed / dim : 0;
 
+    // Accumulate actuals. Key by channel (platform view) or channel||group (group
+    // view). Charts sum every key, so they stay blended in both modes.
     const mtd = {}, daily = {};
     actuals.forEach(r => {
-      const ch = r.channel;
-      (mtd[ch] = mtd[ch] || { spend: 0, revenue: 0 });
-      mtd[ch].spend += n(r.spend); mtd[ch].revenue += n(r.revenue);
+      const key = byGroup ? (r.channel + '||' + (r.grp == null ? '' : r.grp)) : r.channel;
+      (mtd[key] = mtd[key] || { spend: 0, revenue: 0 });
+      mtd[key].spend += n(r.spend); mtd[key].revenue += n(r.revenue);
       const day = +String(r.date).slice(8, 10);
-      (daily[ch] = daily[ch] || {})[day] = { spend: n(r.spend), revenue: n(r.revenue) };
+      (daily[key] = daily[key] || {})[day] = { spend: n(r.spend), revenue: n(r.revenue) };
     });
 
+    // This-month targets, keyed the same way. platformMap maps the targets' platform
+    // code to the mart's channel value.
     const tgt = {};
     targets.filter(t => String(t.month).slice(0, 10) === currentMonth).forEach(t => {
       const ch = platformMap[String(t.platform).toLowerCase()];
       if(!ch) return;
-      (tgt[ch] = tgt[ch] || { spend: 0, revenue: 0 });
-      tgt[ch].spend += n(t.target_spend); tgt[ch].revenue += n(t.target_revenue);
+      const key = byGroup ? (ch + '||' + (t.group_name == null ? '' : t.group_name)) : ch;
+      (tgt[key] = tgt[key] || { spend: 0, revenue: 0 });
+      tgt[key].spend += n(t.target_spend); tgt[key].revenue += n(t.target_revenue);
     });
 
-    const frac = dim ? elapsed / dim : 0;
+    const zero = { spend: 0, revenue: 0 };
     const paceRow = (channel, act, tg) => {
       const es = tg.spend * frac, er = tg.revenue * frac;
       return { channel, a_spend: act.spend, t_spend: tg.spend, e_spend: es, p_spend: es ? act.spend / es : null,
                a_rev: act.revenue, t_rev: tg.revenue, e_rev: er, p_rev: er ? act.revenue / er : null };
     };
-    const rows = Object.values(platformMap)
-      .filter(ch => tgt[ch] && (tgt[ch].spend || tgt[ch].revenue))
-      .map(ch => paceRow(ch, mtd[ch] || { spend: 0, revenue: 0 }, tgt[ch]));
-    if(!rows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
+    const sumRows = (label, list) => paceRow(label,
+      list.reduce((x, r) => ({ spend: x.spend + r.a_spend, revenue: x.revenue + r.a_rev }), { spend: 0, revenue: 0 }),
+      list.reduce((x, r) => ({ spend: x.spend + r.t_spend, revenue: x.revenue + r.t_rev }), { spend: 0, revenue: 0 }));
 
-    const aBl = rows.reduce((x, r) => ({ spend: x.spend + r.a_spend, revenue: x.revenue + r.a_rev }), { spend: 0, revenue: 0 });
-    const tBl = rows.reduce((x, r) => ({ spend: x.spend + r.t_spend, revenue: x.revenue + r.t_rev }), { spend: 0, revenue: 0 });
-    const blended = paceRow('Blended', aBl, tBl);
+    // displayRows entries: { row: paceRow, kind: 'group' | 'subtotal' }. leafRows feeds
+    // the blended grand total (groups only, never subtotals — subtotals would double-count).
+    let leafRows, displayRows;
+    if(byGroup){
+      const perPlatform = {};
+      new Set([...Object.keys(tgt), ...Object.keys(mtd)]).forEach(key => {
+        const idx = key.indexOf('||');
+        const ch = key.slice(0, idx), grp = key.slice(idx + 2);
+        (perPlatform[ch] = perPlatform[ch] || new Set()).add(grp);
+      });
+      leafRows = []; displayRows = [];
+      Object.values(platformMap).forEach(ch => {
+        const grps = perPlatform[ch];
+        if(!grps) return;
+        const platGroupRows = [];
+        Array.from(grps).sort().forEach(grp => {
+          const key = ch + '||' + grp;
+          const t = tgt[key], m = mtd[key] || zero;
+          if(!t && !(m.spend || m.revenue)) return;
+          const r = paceRow(grp || '(none)', m, t || zero);
+          platGroupRows.push(r); leafRows.push(r);
+          displayRows.push({ row: r, kind: 'group' });
+        });
+        if(platGroupRows.length) displayRows.push({ row: sumRows(ch, platGroupRows), kind: 'subtotal' });
+      });
+      if(!leafRows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
+    } else {
+      leafRows = Object.values(platformMap)
+        .filter(ch => tgt[ch] && (tgt[ch].spend || tgt[ch].revenue))
+        .map(ch => paceRow(ch, mtd[ch] || zero, tgt[ch]));
+      if(!leafRows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
+      displayRows = leafRows.map(r => ({ row: r, kind: 'group' }));
+    }
+
+    const blended = sumRows('Blended', leafRows);
 
     const monthLabel = new Date(currentMonth + 'T00:00:00').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
     const impliedRoas = blended.t_spend ? blended.t_rev / blended.t_spend : null;
@@ -447,22 +504,32 @@ function f10PacingTab(cfg){
       kpiCard('Blended ROAS', actualRoas ? actualRoas.toFixed(2) + 'x' : '—', `implied target ${impliedRoas ? impliedRoas.toFixed(2) + 'x' : '—'}`),
     ].join('');
 
+    const tableTitle = byGroup ? `Pacing by platform &amp; group — ${monthLabel}` : `Pacing by platform — ${monthLabel}`;
     host.innerHTML = `
       <div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>
       <div class="kpi-grid">${kpis}</div>
-      <div class="table-card"><div class="table-card-header">Pacing by platform — ${monthLabel}</div><div class="table-wrap" id="${id}-table"></div></div>
+      <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
       <div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`;
 
     const headers = [
-      { label: 'Platform' }, { label: 'MTD Spend', num: true }, { label: 'Spend Target', num: true },
+      { label: byGroup ? 'Platform / Group' : 'Platform' }, { label: 'MTD Spend', num: true }, { label: 'Spend Target', num: true },
       { label: 'Exp. to date', num: true }, { label: 'Spend Pace', num: true }, { label: 'Spend' },
       { label: 'MTD Revenue', num: true }, { label: 'Rev Target', num: true }, { label: 'Rev Pace', num: true }, { label: 'Revenue' },
     ];
-    const tableRows = [...rows, blended].map(r => [
-      r.channel, fmtAUDFull(r.a_spend), fmtAUDFull(r.t_spend), fmtAUDFull(r.e_spend), f10PaceFmt(r.p_spend), f10PaceBadge(r.p_spend, 'spend'),
+    const labelCell = (r, kind) => {
+      if(!byGroup) return r.channel;                                        // unchanged default view
+      if(kind === 'group') return `<span style="padding-left:16px">${r.channel}</span>`;
+      return `<strong>${prettyPlat(r.channel)}</strong>`;                   // platform subtotal
+    };
+    const mkRow = (r, kind) => [
+      labelCell(r, kind), fmtAUDFull(r.a_spend), fmtAUDFull(r.t_spend), fmtAUDFull(r.e_spend), f10PaceFmt(r.p_spend), f10PaceBadge(r.p_spend, 'spend'),
       fmtAUDFull(r.a_rev), fmtAUDFull(r.t_rev), f10PaceFmt(r.p_rev), f10PaceBadge(r.p_rev, 'revenue'),
-    ]);
+    ];
+    const tableRows = [
+      ...displayRows.map(d => mkRow(d.row, d.kind)),
+      mkRow(byGroup ? { ...blended, channel: 'Blended' } : blended, 'blended'),
+    ];
     buildTable(id + '-table', headers, tableRows);
 
     f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);

@@ -248,6 +248,8 @@ tabs: [
 | `targetsTable` | yes | Fully-qualified `{project}.{client}_reporting.pacing_targets`. |
 | `actuals.table` | yes | The mart the dashboard already reads for spend/revenue. |
 | `actuals.dateField` / `channelField` / `spend` / `revenue` | no | Column names; default `date_start` / `channel` / `spend` / `revenue`. |
+| `actuals.groupField` | no | Group column in the actuals mart (e.g. `group_name`). Required for `byGroup`. |
+| `byGroup` | no | When `true` (and `groupField` set), the status table nests group rows under each platform with a platform subtotal; KPIs and charts stay blended. Default `false` (platform-level only). |
 | `platformMap` | no | Maps targets platform codes (`gads`/`meta`/`linkedin`) to the mart's channel values. Default is the three above. |
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
 | `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
@@ -256,6 +258,8 @@ Targets are full-month figures; the tab prorates them
 (`expected_to_date = target * days_elapsed / days_in_month`). Spend and revenue
 pace independently, and over-pacing on spend reads as a caution (amber), not a
 win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
+
+**Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with a platform subtotal and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
 
 ## Ask tab (AI explorer)
 
