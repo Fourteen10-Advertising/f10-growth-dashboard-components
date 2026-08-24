@@ -324,6 +324,7 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   actuals: { table, dateField, channelField, spend, revenue },
 //   platformMap,                              // { gads:'Google Ads', meta:'Meta', linkedin:'LinkedIn' }
 //   revenueNote,                              // optional caveat appended to the info box
+//   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
 // }
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
@@ -388,6 +389,9 @@ function f10PacingTab(cfg){
   const groupField = a.groupField;
   const PRETTY = { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn', bing: 'Bing', tiktok: 'TikTok', reddit: 'Reddit' };
   const prettyPlat = ch => PRETTY[String(ch).toLowerCase()] || ch;
+  // spendOnly: hide the revenue KPI + ROAS cards, the revenue table columns, and the
+  // revenue chart (for lead-gen clients with no tracked revenue).
+  const spendOnly = !!cfg.spendOnly;
 
   async function load(){
     const host = document.getElementById(id + '-body');
@@ -500,8 +504,10 @@ function f10PacingTab(cfg){
 
     const kpis = [
       kpiCard('MTD Spend', fmtAUD(blended.a_spend), `target ${fmtAUD(blended.t_spend)} · pace ${f10PaceFmt(blended.p_spend)} ${f10PaceBadge(blended.p_spend, 'spend')}`),
-      kpiCard('MTD Revenue', fmtAUD(blended.a_rev), `target ${fmtAUD(blended.t_rev)} · pace ${f10PaceFmt(blended.p_rev)} ${f10PaceBadge(blended.p_rev, 'revenue')}`),
-      kpiCard('Blended ROAS', actualRoas ? actualRoas.toFixed(2) + 'x' : '—', `implied target ${impliedRoas ? impliedRoas.toFixed(2) + 'x' : '—'}`),
+      ...(spendOnly ? [] : [
+        kpiCard('MTD Revenue', fmtAUD(blended.a_rev), `target ${fmtAUD(blended.t_rev)} · pace ${f10PaceFmt(blended.p_rev)} ${f10PaceBadge(blended.p_rev, 'revenue')}`),
+        kpiCard('Blended ROAS', actualRoas ? actualRoas.toFixed(2) + 'x' : '—', `implied target ${impliedRoas ? impliedRoas.toFixed(2) + 'x' : '—'}`),
+      ]),
     ].join('');
 
     const tableTitle = byGroup ? `Pacing by platform &amp; group — ${monthLabel}` : `Pacing by platform — ${monthLabel}`;
@@ -510,12 +516,14 @@ function f10PacingTab(cfg){
       <div class="kpi-grid">${kpis}</div>
       <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
-      <div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`;
+      ${spendOnly ? '' : `<div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`}`;
 
     const headers = [
       { label: byGroup ? 'Platform / Group' : 'Platform' }, { label: 'MTD Spend', num: true }, { label: 'Spend Target', num: true },
       { label: 'Exp. to date', num: true }, { label: 'Spend Pace', num: true }, { label: 'Spend' },
-      { label: 'MTD Revenue', num: true }, { label: 'Rev Target', num: true }, { label: 'Rev Pace', num: true }, { label: 'Revenue' },
+      ...(spendOnly ? [] : [
+        { label: 'MTD Revenue', num: true }, { label: 'Rev Target', num: true }, { label: 'Rev Pace', num: true }, { label: 'Revenue' },
+      ]),
     ];
     const labelCell = (r, kind) => {
       if(!byGroup) return r.channel;                                        // unchanged default view
@@ -524,7 +532,9 @@ function f10PacingTab(cfg){
     };
     const mkRow = (r, kind) => [
       labelCell(r, kind), fmtAUDFull(r.a_spend), fmtAUDFull(r.t_spend), fmtAUDFull(r.e_spend), f10PaceFmt(r.p_spend), f10PaceBadge(r.p_spend, 'spend'),
-      fmtAUDFull(r.a_rev), fmtAUDFull(r.t_rev), f10PaceFmt(r.p_rev), f10PaceBadge(r.p_rev, 'revenue'),
+      ...(spendOnly ? [] : [
+        fmtAUDFull(r.a_rev), fmtAUDFull(r.t_rev), f10PaceFmt(r.p_rev), f10PaceBadge(r.p_rev, 'revenue'),
+      ]),
     ];
     const tableRows = [
       ...displayRows.map(d => mkRow(d.row, d.kind)),
@@ -533,7 +543,7 @@ function f10PacingTab(cfg){
     buildTable(id + '-table', headers, tableRows);
 
     f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);
-    f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev);
+    if(!spendOnly) f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev);
   }
 
   return {

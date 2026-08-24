@@ -252,6 +252,7 @@ tabs: [
 | `byGroup` | no | When `true` (and `groupField` set), the status table nests group rows under each platform with a platform subtotal; KPIs and charts stay blended. Default `false` (platform-level only). |
 | `platformMap` | no | Maps targets platform codes (`gads`/`meta`/`linkedin`) to the mart's channel values. Default is the three above. |
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
+| `spendOnly` | no | When `true`, hide the revenue KPI + ROAS cards, the revenue table columns, and the revenue chart — for lead-gen clients with no tracked revenue. Default `false`. |
 | `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
 
 Targets are full-month figures; the tab prorates them
