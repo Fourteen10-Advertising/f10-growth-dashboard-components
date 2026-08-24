@@ -325,6 +325,7 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   platformMap,                              // { gads:'Google Ads', meta:'Meta', linkedin:'LinkedIn' }
 //   revenueNote,                              // optional caveat appended to the info box
 //   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
+//   hideInfoBox,                              // hide the explanatory info box (prorate note + revenueNote)
 // }
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
@@ -512,7 +513,7 @@ function f10PacingTab(cfg){
 
     const tableTitle = byGroup ? `Pacing by platform &amp; group — ${monthLabel}` : `Pacing by platform — ${monthLabel}`;
     host.innerHTML = `
-      <div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>
+      ${cfg.hideInfoBox ? '' : `<div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>`}
       <div class="kpi-grid">${kpis}</div>
       <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
