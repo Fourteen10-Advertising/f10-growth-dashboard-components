@@ -261,7 +261,7 @@ Targets are full-month figures; the tab prorates them
 pace independently, and over-pacing on spend reads as a caution (amber), not a
 win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
 
-**Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with a platform subtotal and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
+**Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with the platform total shown above its groups and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
 
 ## Ask tab (AI explorer)
 
