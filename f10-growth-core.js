@@ -463,7 +463,8 @@ function f10PacingTab(cfg){
       list.reduce((x, r) => ({ spend: x.spend + r.a_spend, revenue: x.revenue + r.a_rev }), { spend: 0, revenue: 0 }),
       list.reduce((x, r) => ({ spend: x.spend + r.t_spend, revenue: x.revenue + r.t_rev }), { spend: 0, revenue: 0 }));
 
-    // displayRows entries: { row: paceRow, kind: 'group' | 'subtotal' }. leafRows feeds
+    // displayRows entries: { row: paceRow, kind: 'group' | 'subtotal' }. Platform totals
+    // (subtotal) render ABOVE their groups. leafRows feeds
     // the blended grand total (groups only, never subtotals — subtotals would double-count).
     let leafRows, displayRows;
     if(byGroup){
@@ -477,16 +478,20 @@ function f10PacingTab(cfg){
       Object.values(platformMap).forEach(ch => {
         const grps = perPlatform[ch];
         if(!grps) return;
-        const platGroupRows = [];
+        const platGroupRows = [], groupDisplay = [];
         Array.from(grps).sort().forEach(grp => {
           const key = ch + '||' + grp;
           const t = tgt[key], m = mtd[key] || zero;
           if(!t && !(m.spend || m.revenue)) return;
           const r = paceRow(grp || '(none)', m, t || zero);
           platGroupRows.push(r); leafRows.push(r);
-          displayRows.push({ row: r, kind: 'group' });
+          groupDisplay.push({ row: r, kind: 'group' });
         });
-        if(platGroupRows.length) displayRows.push({ row: sumRows(ch, platGroupRows), kind: 'subtotal' });
+        // Platform total sits ABOVE its groups (a header row), then its groups indented.
+        if(platGroupRows.length){
+          displayRows.push({ row: sumRows(ch, platGroupRows), kind: 'subtotal' });
+          groupDisplay.forEach(d => displayRows.push(d));
+        }
       });
       if(!leafRows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
     } else {
