@@ -326,6 +326,11 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   revenueNote,                              // optional caveat appended to the info box
 //   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
 //   hideInfoBox,                              // hide the explanatory info box (prorate note + revenueNote)
+//   groupTotals,                              // byGroup only: cross-platform group subtotals rendered
+//                                             // just above Blended, e.g.
+//                                             // [{ label:'Total Customer', match:'customer' },
+//                                             //  { label:'Total Broker',   match:'broker' }]
+//                                             // `match` is a case-insensitive regex tested on group_name.
 // }
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
@@ -393,6 +398,11 @@ function f10PacingTab(cfg){
   // spendOnly: hide the revenue KPI + ROAS cards, the revenue table columns, and the
   // revenue chart (for lead-gen clients with no tracked revenue).
   const spendOnly = !!cfg.spendOnly;
+  // groupTotals (byGroup only): cross-platform subtotals rendered just above Blended.
+  // Each { label, match } sums every leaf group row whose group_name matches the
+  // case-insensitive `match` regex (e.g. a Customer/Broker stream total spanning
+  // platforms). Never fed into the blended grand total, so it can't double-count.
+  const groupTotals = (byGroup && Array.isArray(cfg.groupTotals)) ? cfg.groupTotals : [];
 
   async function load(){
     const host = document.getElementById(id + '-body');
@@ -504,6 +514,14 @@ function f10PacingTab(cfg){
 
     const blended = sumRows('Blended', leafRows);
 
+    // Cross-platform group subtotals (e.g. Total Customer / Total Broker), summed from
+    // the leaf group rows whose group_name matches — rendered just above Blended.
+    const groupTotalRows = groupTotals.map(gt => {
+      let rx; try { rx = new RegExp(gt.match, 'i'); } catch(e){ return null; }
+      const matched = leafRows.filter(r => rx.test(r.channel));
+      return matched.length ? { row: { ...sumRows(gt.label, matched), channel: gt.label }, kind: 'grouptotal' } : null;
+    }).filter(Boolean);
+
     const monthLabel = new Date(currentMonth + 'T00:00:00').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
     const impliedRoas = blended.t_spend ? blended.t_rev / blended.t_spend : null;
     const actualRoas = blended.a_spend ? blended.a_rev / blended.a_spend : null;
@@ -534,6 +552,7 @@ function f10PacingTab(cfg){
     const labelCell = (r, kind) => {
       if(!byGroup) return r.channel;                                        // unchanged default view
       if(kind === 'group') return `<span style="padding-left:16px">${r.channel}</span>`;
+      if(kind === 'grouptotal') return `<strong>${r.channel}</strong>`;     // cross-platform group total
       return `<strong>${prettyPlat(r.channel)}</strong>`;                   // platform subtotal
     };
     const mkRow = (r, kind) => [
@@ -544,6 +563,7 @@ function f10PacingTab(cfg){
     ];
     const tableRows = [
       ...displayRows.map(d => mkRow(d.row, d.kind)),
+      ...groupTotalRows.map(d => mkRow(d.row, d.kind)),
       mkRow(byGroup ? { ...blended, channel: 'Blended' } : blended, 'blended'),
     ];
     buildTable(id + '-table', headers, tableRows);
