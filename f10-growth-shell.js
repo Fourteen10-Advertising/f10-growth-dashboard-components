@@ -234,7 +234,13 @@ function drOpen(){
   /* Reset the staged selection to the committed range each open, so the first
      day click always starts a fresh range rather than completing a stale one. */
   dr.selStart = dr.start; dr.selEnd = dr.end; dr.pending = false; dr.hover = null;
-  const a = new Date((dr.start || today()) + 'T00:00:00');
+  /* Always open on today's month, not the committed range's start month. The
+     committed range can be far in the past (e.g. a large defaultDays window),
+     and centering the calendar there silently invites picking a plausible day
+     out of the wrong year — the year isn't otherwise visible during that
+     flow. Users after a historical range can still page back; fmtDay/fmtRange
+     now show the year throughout so it's never ambiguous which one landed. */
+  const a = new Date(today() + 'T00:00:00');
   dr.viewY = a.getFullYear(); dr.viewM = a.getMonth();
   document.getElementById('f10-dr-pop').hidden = false;
   document.getElementById('f10-dr-trigger').setAttribute('aria-expanded', 'true');

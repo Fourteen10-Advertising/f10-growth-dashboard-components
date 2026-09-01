@@ -78,10 +78,19 @@ function computePeriods(s, e){
   return { s, e, days, pyS, pyE, ppS, ppE };
 }
 
-/* Format a single YYYY-MM-DD as "6 Jun", and a range as "6 Jun – 14 Jun".
-   Used by the date-range trigger label, selection summary and presets. */
-function fmtDay(d){ const dt = new Date(d + 'T00:00:00'); return dt.getDate() + ' ' + dt.toLocaleString('en-AU', { month: 'short' }); }
-function fmtRange(s, e){ return fmtDay(s) + ' – ' + fmtDay(e); }
+/* Format a single YYYY-MM-DD as "6 Jun 2026" (pass { year: false } to omit),
+   and a range as "6 Jun – 14 Jun 2026" (both years shown if they differ, e.g.
+   "28 Dec 2025 – 4 Jan 2026"). Used by the date-range trigger label, selection
+   summary and presets — the year is load-bearing: the picker can be opened
+   showing a month years away from today (a historical committed range, or a
+   large defaultDays window), and without it a perfectly plausible-looking
+   "1 Aug – 31 Aug" silently picks the wrong year with no visual sign anything
+   is off. */
+function fmtDay(d, opts = {}){ const dt = new Date(d + 'T00:00:00'); const s = dt.getDate() + ' ' + dt.toLocaleString('en-AU', { month: 'short' }); return opts.year === false ? s : s + ' ' + dt.getFullYear(); }
+function fmtRange(s, e){
+  const sameYear = new Date(s + 'T00:00:00').getFullYear() === new Date(e + 'T00:00:00').getFullYear();
+  return fmtDay(s, { year: !sameYear }) + ' – ' + fmtDay(e);
+}
 
 /* First and last day of the calendar month containing d (YYYY-MM-DD). Used by
    the date-range presets (This month / Last month). */
