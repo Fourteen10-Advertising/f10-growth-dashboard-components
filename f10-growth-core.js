@@ -400,7 +400,7 @@ function f10PacingTab(cfg){
 
     const targetsSQL = `SELECT FORMAT_DATE('%Y-%m-%d', month) AS month, platform, group_name, target_spend, target_revenue FROM \`${cfg.targetsTable}\``;
     const actualsSQL = byGroup ? `
-      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      WITH latest AS (SELECT LEAST(MAX(${dateField}), DATE_SUB(CURRENT_DATE('Australia/Sydney'), INTERVAL 1 DAY)) AS d FROM \`${a.table}\`)
       SELECT ${channelField} AS channel,
              ${groupField} AS grp,
              FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
@@ -411,7 +411,7 @@ function f10PacingTab(cfg){
       WHERE ${dateField} >= DATE_TRUNC((SELECT d FROM latest), MONTH)
         AND ${dateField} <= (SELECT d FROM latest)
       GROUP BY channel, grp, date` : `
-      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      WITH latest AS (SELECT LEAST(MAX(${dateField}), DATE_SUB(CURRENT_DATE('Australia/Sydney'), INTERVAL 1 DAY)) AS d FROM \`${a.table}\`)
       SELECT ${channelField} AS channel,
              FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
              CAST((SELECT d FROM latest) AS STRING) AS latest_date,
@@ -518,7 +518,7 @@ function f10PacingTab(cfg){
 
     const tableTitle = byGroup ? `Pacing by platform &amp; group — ${monthLabel}` : `Pacing by platform — ${monthLabel}`;
     host.innerHTML = `
-      ${cfg.hideInfoBox ? '' : `<div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>`}
+      ${cfg.hideInfoBox ? '' : `<div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date through the latest complete day (yesterday); each full-month target is prorated by the same number of days. Today is excluded until its data is complete. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>`}
       <div class="kpi-grid">${kpis}</div>
       <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
