@@ -289,6 +289,10 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 
   const toggles = document.getElementById(togglesId);
   if(toggles){
+    // Keep the latest draw on the element so the once-bound listener below always
+    // redraws the CURRENT data. Without this it closes over the first render's draw
+    // and reverts the chart to the initial date/granularity whenever a chip is toggled.
+    toggles._f10Draw = draw;
     toggles.innerHTML = series.filter(s => s.toggle !== false).map(s => {
       const k = keyOf(s);
       return `<button type="button" data-k="${String(k).replace(/"/g, '&quot;')}"${state[k] ? ' class="active"' : ''}>`
@@ -302,7 +306,7 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
         const k = btn.dataset.k;
         state[k] = !state[k];
         btn.classList.toggle('active', state[k]);
-        draw();
+        toggles._f10Draw();
       });
       toggles._f10Bound = true;
     }
