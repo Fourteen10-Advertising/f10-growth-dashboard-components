@@ -218,8 +218,9 @@ Chips use the `.metric-seg` style (a multi-select cousin of `.seg`).
 Returns a ready-made tab object (`{id, group, navLabel, title, sub, body, load}`)
 to spread into `config.tabs`. It shows month-to-date actuals against the
 full-month targets prorated by days elapsed — per platform and blended — with a
-status table (colour-coded pace badges) and two stacked through-the-month charts
-(cumulative actual vs a dashed target-pace line, for spend and revenue).
+status table (colour-coded pace badges, **Blended row shown first**, then one
+row per platform) and two stacked through-the-month charts (cumulative actual
+vs a dashed target-pace line, for spend and revenue).
 
 It reads a governed BigQuery **targets table** plus the client's **actuals mart**,
 so it never touches the source sheet. Pair it with the `budget-pacing-targets`
@@ -236,7 +237,7 @@ tabs: [
       spend: 'spend',            // spend column
       revenue: 'revenue',        // revenue column
     },
-    platformMap: { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn' },
+    platformMap: { gads: 'gads', meta: 'meta', linkedin: 'linkedin' },
     revenueNote: 'Revenue is ad-attributed and lags spend on a longer attribution window.',
   }),
   // ...your other tabs
@@ -250,7 +251,7 @@ tabs: [
 | `actuals.dateField` / `channelField` / `spend` / `revenue` | no | Column names; default `date_start` / `channel` / `spend` / `revenue`. |
 | `actuals.groupField` | no | Group column in the actuals mart (e.g. `group_name`). Required for `byGroup`. |
 | `byGroup` | no | When `true` (and `groupField` set), the status table nests group rows under each platform with a platform subtotal; KPIs and charts stay blended. Default `false` (platform-level only). |
-| `platformMap` | no | Maps targets platform codes (`gads`/`meta`/`linkedin`) to the mart's channel values. Default is the three above. |
+| `platformMap` | no | Maps targets platform codes to the mart's `channelField` **raw values** — every value here MUST equal the literal string stored in that column (e.g. `gads`/`meta`/`linkedin`), never a display label. This is an identity map in the overwhelming majority of cases. The status table's Platform column shows a proper display name (`Google Ads`, `Meta`, `LinkedIn`, `Bing`, `TikTok`, `Reddit`) automatically for any recognised code — you never set the pretty name yourself. A platformMap value that doesn't match the raw actuals value silently computes MTD spend/revenue as zero for that platform (the accumulator keys off the raw value; the row lookup keys off `Object.values(platformMap)`) — there is no error, just blank numbers, so get this identity-correct first. Default is the three platform codes above. |
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
 | `spendOnly` | no | When `true`, hide the revenue KPI + ROAS cards, the revenue table columns, and the revenue chart — for lead-gen clients with no tracked revenue. Default `false`. |
 | `hideInfoBox` | no | When `true`, hide the explanatory info box (the prorate note + `revenueNote`). Default `false`. |

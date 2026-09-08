@@ -536,7 +536,7 @@ function f10PacingTab(cfg){
       ]),
     ];
     const labelCell = (r, kind) => {
-      if(!byGroup) return r.channel;                                        // unchanged default view
+      if(!byGroup) return prettyPlat(r.channel);                           // pretty platform name (r.channel is the raw platformMap code)
       if(kind === 'group') return `<span style="padding-left:16px">${r.channel}</span>`;
       return `<strong>${prettyPlat(r.channel)}</strong>`;                   // platform subtotal
     };
@@ -547,8 +547,8 @@ function f10PacingTab(cfg){
       ]),
     ];
     const tableRows = [
-      ...displayRows.map(d => mkRow(d.row, d.kind)),
       mkRow(byGroup ? { ...blended, channel: 'Blended' } : blended, 'blended'),
+      ...displayRows.map(d => mkRow(d.row, d.kind)),
     ];
     buildTable(id + '-table', headers, tableRows);
 
