@@ -16,14 +16,25 @@ loaders.
      the shared builders (`kpiCard`, `buildTable`, `makeChart`) and helpers
      (`runQuery`, `fmt*`, `computePeriods` via `ctx.dates`, `gGroup`, `sqlStr`).
    - Add any dropdown `filters` and list their ids on the tabs that use them.
-3. In Netlify, set:
-   - `GOOGLE_SERVICE_ACCOUNT` — service account JSON with BigQuery access
-     (project `mcc-poc-477801`, location `australia-southeast1`). Usually already
-     set at the organisation level.
+3. In Netlify, set these. `GOOGLE_SERVICE_ACCOUNT` is a **site-level** environment variable set to the
+   key of this client's own scoped service account, `dash-<client>@mcc-poc-477801` (marked
+   secret, production and deploy-preview contexts). It reads only the client's
+   `<prefix>_marts` and `<prefix>_reporting` datasets. This is required: there is no
+   organisation or account default, and a site without it fails closed. Never use the
+   shared cross-client reader. Create the service account, vault secret
+   (`BIGQUERY_SA_JSON__<CLIENT>`) and isolation check by following
+   `templates/client-sa/README.md` in the HQ company folder (the dashboard skills do this
+   in "Step 6b"). Netlify applies a changed variable only on the next deploy, so redeploy
+   after setting it. The dashboard must read only the client's own two datasets: if a tab
+   needs anything else (previews, competitor data, HubSpot), add it to the client's marts in
+   f10-dataform rather than reading a shared dataset.
    - `ALLOWED_ORIGIN` — this site's own origin (e.g. `https://acme.netlify.app`),
      to activate the CORS lock on the `bq` function.
-4. Restrict access to the deployed site at the Netlify level (site password / SSO
-   / IP allowlist) — the `bq` endpoint is read-only but is not an auth boundary.
+4. Password protect the site in Netlify (site password or SSO) before sharing the URL. This
+   is required, not optional: the `bq` function runs any SQL it is sent and is not an
+   auth boundary, so the password is the access control. Save it in HQ secrets as
+   `DASHBOARD_PASSWORD__<SITE>`; the client lead posts and pins it in the client's
+   internal Slack channel. Confirm the live site returns 401 when unauthenticated.
 5. Deploy. No build step — Netlify publishes the static files and the `bq.js`
    function (which has no npm dependencies).
 
