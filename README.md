@@ -254,6 +254,7 @@ tabs: [
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
 | `spendOnly` | no | When `true`, hide the revenue KPI + ROAS cards, the revenue table columns, and the revenue chart — for lead-gen clients with no tracked revenue. Default `false`. |
 | `hideInfoBox` | no | When `true`, hide the explanatory info box (the prorate note + `revenueNote`). Default `false`. |
+| `groupTotals` | no | `byGroup` only. Array of `{ label, match }` cross-platform subtotals rendered just above Blended. `match` is a case-insensitive regex tested on `group_name`. Example: `[{ label:'Total Customer', match:'customer' }, { label:'Total Broker', match:'broker' }]`. Never fed into the blended total. |
 | `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
 
 Targets are full-month figures; the tab prorates them
@@ -262,6 +263,8 @@ pace independently, and over-pacing on spend reads as a caution (amber), not a
 win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
 
 **Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with the platform total shown above its groups and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
+
+**Cross-platform group totals (`groupTotals`).** In `byGroup` mode you can add stream-style subtotals that span platforms — e.g. a single "Total Customer" and "Total Broker" across Meta + LinkedIn — rendered just above the Blended grand total. Pass `groupTotals: [{ label:'Total Customer', match:'customer' }, { label:'Total Broker', match:'broker' }]`; each `match` is a case-insensitive regex tested against `group_name`, so `customer` also captures `Customer Lead Forms`. These are display-only subtotals and are never added into the blended total, so they can't double-count. Groups that match neither (e.g. Google Search / PMax) simply aren't included in either subtotal.
 
 ## Ask tab (AI explorer)
 
