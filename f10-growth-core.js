@@ -330,7 +330,17 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   revenueNote,                              // optional caveat appended to the info box
 //   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
 //   hideInfoBox,                              // hide the explanatory info box (prorate note + revenueNote)
+//   paceOverrides,                            // optional per-line expected-to-date rules (see below)
 // }
+//
+// paceOverrides: [{ month:'YYYY-MM', platform, group, mode, from, daily, note }]
+//   Replaces the straight-line prorate for one line in one month. `platform` is the
+//   targets code (gads/meta/linkedin); `group` is the group_name (byGroup mode only).
+//   mode 'final' — the line has stopped spending for the month (e.g. paused): it is
+//                  compared against its full-month target, not a prorated share.
+//   mode 'daily' — the line's budget changed on `from` ('YYYY-MM-DD') to `daily` per
+//                  day: expected = actual spend before `from` + daily x days since.
+//   note         — optional label shown next to the line (defaults per mode).
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
 function f10PaceStatus(pace, kind){
@@ -345,8 +355,10 @@ function f10PaceBadge(pace, kind){ const s = f10PaceStatus(pace, kind); return `
 function f10PaceFmt(pace){ return (pace === null || !isFinite(pace)) ? '—' : Math.round(pace * 100) + '%'; }
 
 // Through-the-month cumulative chart: blended actual (solid, stops at the latest
-// data day) vs a straight target-pace line to the full-month target.
-function f10PacingChart(canvasId, dim, latestDay, dailyByChannel, metric, target){
+// data day) vs the target-pace line. paceLine is the per-day cumulative expected
+// (summed across lines, so paceOverrides bend it); without it, a straight line to
+// the full-month target.
+function f10PacingChart(canvasId, dim, latestDay, dailyByChannel, metric, target, paceLine){
   const labels = Array.from({ length: dim }, (_, i) => String(i + 1));
   const dayTotal = new Array(dim).fill(0);
   Object.values(dailyByChannel).forEach(byDay => {
@@ -354,7 +366,7 @@ function f10PacingChart(canvasId, dim, latestDay, dailyByChannel, metric, target
   });
   let acc = 0;
   const cumulative = dayTotal.map((v, i) => { acc += v; return i < latestDay ? acc : null; });
-  const paceLine = labels.map((_, i) => target * (i + 1) / dim);
+  paceLine = paceLine || labels.map((_, i) => target * (i + 1) / dim);
   const ink = getCSS('--ink') || '#000', grey = getCSS('--grey') || '#727272';
   makeChart(canvasId, {
     type: 'line',
@@ -457,15 +469,52 @@ function f10PacingTab(cfg){
       tgt[key].spend += n(t.target_spend); tgt[key].revenue += n(t.target_revenue);
     });
 
+    // This-month paceOverrides, keyed like tgt/mtd.
+    const overrides = {};
+    (cfg.paceOverrides || []).forEach(o => {
+      if(!o || String(o.month).slice(0, 7) !== currentMonth.slice(0, 7)) return;
+      const ch = platformMap[String(o.platform).toLowerCase()];
+      if(!ch) return;
+      overrides[byGroup ? (ch + '||' + (o.group == null ? '' : o.group)) : ch] = o;
+    });
+    const overrideNote = o => o.note || (o.mode === 'final' ? 'paused'
+      : `${fmtAUD(n(o.daily))}/day from ${new Date(o.from + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`);
+
+    // Per-day cumulative expected for one line (index i = day i+1). Default is the
+    // straight-line prorate; paceOverrides swap in their own curve.
+    const expectedCurve = (key, tg, metric) => {
+      const o = overrides[key], target = tg[metric];
+      if(!o || (o.mode !== 'final' && o.mode !== 'daily')) return Array.from({ length: dim }, (_, i) => target * (i + 1) / dim);
+      const byDay = daily[key] || {};
+      let acc = 0;
+      const actualCum = Array.from({ length: dim }, (_, i) => (acc += n((byDay[i + 1] || {})[metric])));
+      if(o.mode === 'final') return actualCum.map((v, i) => i + 1 < elapsed ? v : target);
+      // 'daily': actuals up to the change, then the new daily budget. Revenue has no
+      // daily budget, so it keeps the straight-line prorate.
+      if(metric !== 'spend') return Array.from({ length: dim }, (_, i) => target * (i + 1) / dim);
+      const fromDay = String(o.from).slice(0, 7) === currentMonth.slice(0, 7) ? +String(o.from).slice(8, 10) : 1;
+      const pre = fromDay > 1 ? actualCum[fromDay - 2] : 0;
+      return actualCum.map((v, i) => i + 1 < fromDay ? v : pre + n(o.daily) * (i + 2 - fromDay));
+    };
+
     const zero = { spend: 0, revenue: 0 };
-    const paceRow = (channel, act, tg) => {
-      const es = tg.spend * frac, er = tg.revenue * frac;
-      return { channel, a_spend: act.spend, t_spend: tg.spend, e_spend: es, p_spend: es ? act.spend / es : null,
+    const paceRow = (channel, act, tg, key) => {
+      const cs = expectedCurve(key, tg, 'spend'), cr = expectedCurve(key, tg, 'revenue');
+      const es = elapsed ? cs[elapsed - 1] : 0, er = elapsed ? cr[elapsed - 1] : 0;
+      return { channel, key, note: overrides[key] ? overrideNote(overrides[key]) : '', curve: { spend: cs, revenue: cr },
+               a_spend: act.spend, t_spend: tg.spend, e_spend: es, p_spend: es ? act.spend / es : null,
                a_rev: act.revenue, t_rev: tg.revenue, e_rev: er, p_rev: er ? act.revenue / er : null };
     };
-    const sumRows = (label, list) => paceRow(label,
-      list.reduce((x, r) => ({ spend: x.spend + r.a_spend, revenue: x.revenue + r.a_rev }), { spend: 0, revenue: 0 }),
-      list.reduce((x, r) => ({ spend: x.spend + r.t_spend, revenue: x.revenue + r.t_rev }), { spend: 0, revenue: 0 }));
+    // Totals sum their lines' expected-to-date (not a fresh prorate of the summed
+    // target), so a line's paceOverride carries up into its platform and Blended.
+    const sumRows = (label, list) => {
+      const s = f => list.reduce((x, r) => x + r[f], 0);
+      const es = s('e_spend'), er = s('e_rev');
+      const sumCurve = m => Array.from({ length: dim }, (_, i) => list.reduce((x, r) => x + r.curve[m][i], 0));
+      return { channel: label, note: '', curve: { spend: sumCurve('spend'), revenue: sumCurve('revenue') },
+               a_spend: s('a_spend'), t_spend: s('t_spend'), e_spend: es, p_spend: es ? s('a_spend') / es : null,
+               a_rev: s('a_rev'), t_rev: s('t_rev'), e_rev: er, p_rev: er ? s('a_rev') / er : null };
+    };
 
     // displayRows entries: { row: paceRow, kind: 'group' | 'subtotal' }. Platform totals
     // (subtotal) render ABOVE their groups. leafRows feeds
@@ -487,7 +536,7 @@ function f10PacingTab(cfg){
           const key = ch + '||' + grp;
           const t = tgt[key], m = mtd[key] || zero;
           if(!t && !(m.spend || m.revenue)) return;
-          const r = paceRow(grp || '(none)', m, t || zero);
+          const r = paceRow(grp || '(none)', m, t || zero, key);
           platGroupRows.push(r); leafRows.push(r);
           groupDisplay.push({ row: r, kind: 'group' });
         });
@@ -501,7 +550,7 @@ function f10PacingTab(cfg){
     } else {
       leafRows = Object.values(platformMap)
         .filter(ch => tgt[ch] && (tgt[ch].spend || tgt[ch].revenue))
-        .map(ch => paceRow(ch, mtd[ch] || zero, tgt[ch]));
+        .map(ch => paceRow(ch, mtd[ch] || zero, tgt[ch], ch));
       if(!leafRows.length){ host.innerHTML = `<div class="info-box">No targets found for this month. Add rows to the targets sheet.</div>`; return; }
       displayRows = leafRows.map(r => ({ row: r, kind: 'group' }));
     }
@@ -535,9 +584,10 @@ function f10PacingTab(cfg){
         { label: 'MTD Revenue', num: true }, { label: 'Rev Target', num: true }, { label: 'Rev Pace', num: true }, { label: 'Revenue' },
       ]),
     ];
+    const noteTag = r => r.note ? ` <span style="color:var(--grey,#727272);font-size:11px">· ${r.note}</span>` : '';
     const labelCell = (r, kind) => {
-      if(!byGroup) return r.channel;                                        // unchanged default view
-      if(kind === 'group') return `<span style="padding-left:16px">${r.channel}</span>`;
+      if(!byGroup) return r.channel + noteTag(r);                           // unchanged default view
+      if(kind === 'group') return `<span style="padding-left:16px">${r.channel}</span>${noteTag(r)}`;
       return `<strong>${prettyPlat(r.channel)}</strong>`;                   // platform subtotal
     };
     const mkRow = (r, kind) => [
@@ -552,8 +602,8 @@ function f10PacingTab(cfg){
     ];
     buildTable(id + '-table', headers, tableRows);
 
-    f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);
-    if(!spendOnly) f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev);
+    f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend, blended.curve.spend);
+    if(!spendOnly) f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev, blended.curve.revenue);
   }
 
   return {

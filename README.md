@@ -254,6 +254,7 @@ tabs: [
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
 | `spendOnly` | no | When `true`, hide the revenue KPI + ROAS cards, the revenue table columns, and the revenue chart — for lead-gen clients with no tracked revenue. Default `false`. |
 | `hideInfoBox` | no | When `true`, hide the explanatory info box (the prorate note + `revenueNote`). Default `false`. |
+| `paceOverrides` | no | Per-line, per-month replacements for the straight-line prorate (see below). Default none. |
 | `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
 
 Targets are full-month figures; the tab prorates them
@@ -262,6 +263,19 @@ pace independently, and over-pacing on spend reads as a caution (amber), not a
 win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
 
 **Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with the platform total shown above its groups and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
+
+**Pace overrides (`paceOverrides`).** When a line's plan changes mid-month, the straight-line prorate misreads it. A paused campaign whose target is reset to its final actuals would show as over-pacing, because only part of that target is "expected" by today. Each override applies to one line in one month and changes how its expected-to-date is worked out:
+
+```js
+paceOverrides: [
+  // Paused: compare against the full-month target, not a prorated share.
+  { month: '2026-10', platform: 'meta', group: 'Customer Lead Forms', mode: 'final' },
+  // Budget changed to $150/day from 14 Oct: expected = actual spend before the 14th + $150 x days since.
+  { month: '2026-10', platform: 'gads', group: 'PMax', mode: 'daily', from: '2026-10-14', daily: 150 },
+],
+```
+
+`platform` is the targets platform code; `group` is the `group_name` (only used with `byGroup`). The row shows a short grey note (`paused`, `$150/day from 14 Oct`, or your own `note`). Platform totals, Blended and the target-pace chart line sum each line's expected-to-date, so an override carries up into them. `daily` applies to spend only; revenue keeps the prorate. Overrides for other months are ignored, so they can stay in config after the month ends. Without `paceOverrides` the output is unchanged.
 
 ## Ask tab (AI explorer)
 
