@@ -275,7 +275,7 @@ paceOverrides: [
 ],
 ```
 
-`platform` is the targets platform code; `group` is the `group_name` (only used with `byGroup`). The row shows a short grey note (`paused`, `$150/day from 14 Oct`, or your own `note`). Platform totals, Blended and the target-pace chart line sum each line's expected-to-date, so an override carries up into them. `daily` applies to spend only; revenue keeps the prorate. Overrides for other months are ignored, so they can stay in config after the month ends. Without `paceOverrides` the output is unchanged.
+`platform` is the targets platform code; `group` is the `group_name`. Without `byGroup`, only platform-level overrides (no `group`) apply; one with a `group` is ignored rather than applied to the whole platform. A `daily` override whose `from` date is after the latest data day is ignored until that day arrives. Entries with an unknown `mode`, or a `daily` entry without an ISO `from` and a numeric `daily`, are dropped with a console warning. The row shows a short grey note (`paused`, `$150/day from 14 Oct`, or your own `note`). Platform totals, Blended and the target-pace chart line sum each line's expected-to-date, so an override carries up into them. `daily` applies to spend only; revenue keeps the prorate. Overrides for other months are ignored, so they can stay in config after the month ends. Without `paceOverrides` the output is unchanged.
 
 ## Ask tab (AI explorer)
 

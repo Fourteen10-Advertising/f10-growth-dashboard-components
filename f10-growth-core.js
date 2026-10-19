@@ -469,12 +469,22 @@ function f10PacingTab(cfg){
       tgt[key].spend += n(t.target_spend); tgt[key].revenue += n(t.target_revenue);
     });
 
-    // This-month paceOverrides, keyed like tgt/mtd.
+    // This-month paceOverrides, keyed like tgt/mtd. Malformed entries are dropped with
+    // a warning so a row's note and its numbers always describe the same rule.
     const overrides = {};
     (cfg.paceOverrides || []).forEach(o => {
       if(!o || String(o.month).slice(0, 7) !== currentMonth.slice(0, 7)) return;
       const ch = platformMap[String(o.platform).toLowerCase()];
       if(!ch) return;
+      const drop = why => console.warn(`f10PacingTab: ignoring paceOverride (${why})`, o);
+      if(o.mode !== 'final' && o.mode !== 'daily') return drop(`unknown mode '${o.mode}'`);
+      if(o.mode === 'daily'){
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(String(o.from))) return drop('daily needs an ISO from date');
+        if(!isFinite(parseFloat(o.daily))) return drop('daily needs a numeric daily budget');
+        if(String(o.from) > latest) return;                                 // change not reached yet: keep the prorate
+      }
+      // A group-level override must not widen to the whole platform row.
+      if(!byGroup && o.group != null) return drop('group set but byGroup is off');
       overrides[byGroup ? (ch + '||' + (o.group == null ? '' : o.group)) : ch] = o;
     });
     const overrideNote = o => o.note || (o.mode === 'final' ? 'paused'
@@ -484,7 +494,7 @@ function f10PacingTab(cfg){
     // straight-line prorate; paceOverrides swap in their own curve.
     const expectedCurve = (key, tg, metric) => {
       const o = overrides[key], target = tg[metric];
-      if(!o || (o.mode !== 'final' && o.mode !== 'daily')) return Array.from({ length: dim }, (_, i) => target * (i + 1) / dim);
+      if(!o) return Array.from({ length: dim }, (_, i) => target * (i + 1) / dim);
       const byDay = daily[key] || {};
       let acc = 0;
       const actualCum = Array.from({ length: dim }, (_, i) => (acc += n((byDay[i + 1] || {})[metric])));
