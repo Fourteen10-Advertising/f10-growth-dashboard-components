@@ -254,6 +254,7 @@ tabs: [
 | `revenueNote` | no | Caveat appended to the info box (e.g. attribution-window note). |
 | `spendOnly` | no | When `true`, hide the revenue KPI + ROAS cards, the revenue table columns, and the revenue chart — for lead-gen clients with no tracked revenue. Default `false`. |
 | `hideInfoBox` | no | When `true`, hide the explanatory info box (the prorate note + `revenueNote`). Default `false`. |
+| `outlook` | no | Adds a spend-by-month table and bar chart under the pacing table: actual spend for past months, this month's spend to date and budget, and the budget for upcoming months. `true` shows 2 months back and 2 ahead; `{ pastMonths, futureMonths }` sets the window. Budgets come from the same targets table, so upcoming months only show once their rows are in the targets sheet. Spend only. Default off. |
 | `id` / `group` / `navLabel` / `title` / `sub` / `dot` | no | Chrome overrides; sensible defaults. |
 
 Targets are full-month figures; the tab prorates them
@@ -262,6 +263,8 @@ pace independently, and over-pacing on spend reads as a caution (amber), not a
 win. Pace bands: below 0.9 behind/under, 0.9 to 1.1 on-track, above 1.1 ahead/over.
 
 **Group breakdown (`byGroup`).** By default the tab shows one row per platform. Set `byGroup: true` with `actuals.groupField` pointing at a group column and give the targets sheet a `group_name` per row, and the table renders each group nested under its platform (Search / PMax under Google, Customer / Broker under Meta, …) with the platform total shown above its groups and a blended grand total. The targets platform code still maps through `platformMap`, so a platform that is in the targets but has no actuals rows (a channel not yet tracked in the warehouse) shows its groups at $0 actuals — use `revenueNote` to explain the gap. KPIs and the two cumulative charts remain blended.
+
+**Spend by month (`outlook`).** Set `outlook: true` to answer "what did we spend, where are we this month, and what is budgeted next" on one screen. Rows follow the same platform and group nesting as the pacing table. A platform with budget rows but no actuals yet (for example a channel launching next month) appears as long as its targets code is in `platformMap`. The month logic is tested in `tools/test-pacing-outlook.mjs` (`node tools/test-pacing-outlook.mjs`).
 
 ## Ask tab (AI explorer)
 
