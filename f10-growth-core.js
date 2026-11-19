@@ -330,6 +330,8 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   revenueNote,                              // optional caveat appended to the info box
 //   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
 //   hideInfoBox,                              // hide the explanatory info box (prorate note + revenueNote)
+//   outlook,                                  // true or { pastMonths, futureMonths }: adds a spend-by-month
+//                                             // table + chart (past actuals, this month, future budgets)
 // }
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
@@ -377,6 +379,99 @@ function f10PacingChart(canvasId, dim, latestDay, dailyByChannel, metric, target
   });
 }
 
+// ── Spend outlook (f10PacingTab cfg.outlook) ──
+// Month keys are 'YYYY-MM-01' strings; shift by whole months in UTC so the
+// browser's timezone never moves a month boundary.
+function f10MonthShift(monthKey, k){
+  const d = new Date(Date.UTC(+monthKey.slice(0, 4), +monthKey.slice(5, 7) - 1 + k, 1));
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0') + '-01';
+}
+function f10MonthLabel(monthKey){
+  const d = new Date(Date.UTC(+monthKey.slice(0, 4), +monthKey.slice(5, 7) - 1, 1));
+  return d.toLocaleDateString('en-AU', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+}
+
+// Pure: builds the outlook grid from monthly actuals + all targets. No DOM.
+//   monthly: [{ channel, grp, month:'YYYY-MM-01', spend }]   (actuals, mart channel values)
+//   targets: [{ month, platform, group_name, target_spend }] (targets platform codes)
+// Returns { months:[{key,label,kind:'past'|'current'|'future'}], rows:[{label,kind,cells}], total }
+// where cells[monthKey] = { actual, budget }. Rows nest groups under a platform
+// subtotal when byGroup; the total sums leaf rows only (never subtotals).
+function f10PacingOutlook({ monthly, targets, currentMonth, pastMonths, futureMonths, platformMap, byGroup }){
+  const months = [];
+  for(let k = -pastMonths; k <= futureMonths; k++){
+    const key = f10MonthShift(currentMonth, k);
+    months.push({ key, label: f10MonthLabel(key), kind: k < 0 ? 'past' : (k === 0 ? 'current' : 'future') });
+  }
+  const inWindow = new Set(months.map(m => m.key));
+  const keyOf = (ch, grp) => byGroup ? ch + '||' + (grp == null ? '' : grp) : ch;
+  const cells = {};
+  const cell = (key, m) => ((cells[key] = cells[key] || {})[m] = cells[key][m] || { actual: 0, budget: 0 });
+  const mapped = new Set(Object.values(platformMap));
+
+  monthly.forEach(r => {
+    const m = String(r.month).slice(0, 10);
+    if(!inWindow.has(m) || !mapped.has(r.channel)) return;
+    cell(keyOf(r.channel, r.grp), m).actual += n(r.spend);
+  });
+  targets.forEach(t => {
+    const m = String(t.month).slice(0, 10);
+    const ch = platformMap[String(t.platform).toLowerCase()];
+    if(!inWindow.has(m) || !ch) return;
+    cell(keyOf(ch, t.group_name), m).budget += n(t.target_spend);
+  });
+
+  const hasValue = c => Object.values(c).some(v => v.actual || v.budget);
+  const sumCells = list => {
+    const out = {};
+    months.forEach(m => { out[m.key] = { actual: 0, budget: 0 }; });
+    list.forEach(c => months.forEach(m => {
+      const v = c[m.key]; if(!v) return;
+      out[m.key].actual += v.actual; out[m.key].budget += v.budget;
+    }));
+    return out;
+  };
+
+  const rows = [], leaves = [];
+  Object.values(platformMap).forEach(ch => {
+    if(byGroup){
+      const grps = Object.keys(cells).filter(k => k.slice(0, k.indexOf('||')) === ch && hasValue(cells[k]))
+        .map(k => k.slice(k.indexOf('||') + 2)).sort();
+      if(!grps.length) return;
+      const groupCells = grps.map(g => cells[ch + '||' + g]);
+      rows.push({ label: ch, kind: 'subtotal', cells: sumCells(groupCells) });
+      grps.forEach((g, i) => { rows.push({ label: g || '(none)', kind: 'group', cells: groupCells[i] }); leaves.push(groupCells[i]); });
+    } else if(cells[ch] && hasValue(cells[ch])){
+      rows.push({ label: ch, kind: 'group', cells: cells[ch] });
+      leaves.push(cells[ch]);
+    }
+  });
+  return { months, rows, total: sumCells(leaves) };
+}
+
+// Monthly bars: actual spend (past months + this month to date) next to budget.
+function f10OutlookChart(canvasId, months, total){
+  const ink = getCSS('--ink') || '#000', grey = getCSS('--grey') || '#727272';
+  makeChart(canvasId, {
+    type: 'bar',
+    data: { labels: months.map(m => m.kind === 'current' ? m.label + ' (MTD)' : m.label), datasets: [
+      { label: 'Actual spend', data: months.map(m => m.kind === 'future' ? null : total[m.key].actual), backgroundColor: ink },
+      { label: 'Budget', data: months.map(m => total[m.key].budget || null), backgroundColor: grey },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { boxWidth: 8, padding: 10, font: { size: 10 } } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y === null ? '—' : fmtAUDFull(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: v => f10MoneyTick(v) } },
+      },
+    },
+  });
+}
+
 function f10PacingTab(cfg){
   const id = cfg.id || 'pacing';
   const platformMap = cfg.platformMap || { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn' };
@@ -397,6 +492,11 @@ function f10PacingTab(cfg){
   // spendOnly: hide the revenue KPI + ROAS cards, the revenue table columns, and the
   // revenue chart (for lead-gen clients with no tracked revenue).
   const spendOnly = !!cfg.spendOnly;
+  // outlook: spend by month around this month. true = 2 months back, 2 ahead.
+  const outlook = cfg.outlook ? {
+    past: Math.max(0, Math.floor(n((cfg.outlook === true ? {} : cfg.outlook).pastMonths ?? 2))),
+    future: Math.max(0, Math.floor(n((cfg.outlook === true ? {} : cfg.outlook).futureMonths ?? 2))),
+  } : null;
 
   async function load(){
     const host = document.getElementById(id + '-body');
@@ -426,7 +526,20 @@ function f10PacingTab(cfg){
         AND ${dateField} <= (SELECT d FROM latest)
       GROUP BY channel, date`;
 
-    const [targets, actuals] = await Promise.all([runQuery(targetsSQL), runQuery(actualsSQL)]);
+    const monthlySQL = outlook ? `
+      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      SELECT ${channelField} AS channel,
+             ${byGroup ? groupField : 'CAST(NULL AS STRING)'} AS grp,
+             FORMAT_DATE('%Y-%m-01', ${dateField}) AS month,
+             ROUND(SUM(${spendCol}), 2) AS spend
+      FROM \`${a.table}\`
+      WHERE ${dateField} >= DATE_SUB(DATE_TRUNC((SELECT d FROM latest), MONTH), INTERVAL ${outlook.past} MONTH)
+        AND ${dateField} <= (SELECT d FROM latest)
+      GROUP BY channel, grp, month` : null;
+
+    const [targets, actuals, monthly] = await Promise.all([
+      runQuery(targetsSQL), runQuery(actualsSQL), monthlySQL ? runQuery(monthlySQL) : Promise.resolve([]),
+    ]);
     if(!actuals.length){ host.innerHTML = '<div class="info-box">No performance data available.</div>'; return; }
 
     const latest = actuals[0].latest_date;
@@ -525,6 +638,8 @@ function f10PacingTab(cfg){
       ${cfg.hideInfoBox ? '' : `<div class="info-box">Pacing for <strong>${monthLabel}</strong>, prorated to the latest data date (day ${elapsed} of ${dim}). Actuals are month-to-date; each full-month target is prorated by days elapsed. Over-pacing on spend is a caution, not a win.${cfg.revenueNote ? ' ' + cfg.revenueNote : ''}</div>`}
       <div class="kpi-grid">${kpis}</div>
       <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
+      ${outlook ? `<div class="table-card"><div class="table-card-header">Spend by month: actuals, this month and upcoming budgets</div><div class="table-wrap" id="${id}-outlook-table"></div></div>
+      <div class="chart-card"><div class="chart-card-title">Spend by month: actual vs budget</div><div class="chart-wrap"><canvas id="${id}-chart-outlook"></canvas></div></div>` : ''}
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
       ${spendOnly ? '' : `<div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`}`;
 
@@ -551,6 +666,30 @@ function f10PacingTab(cfg){
       mkRow(byGroup ? { ...blended, channel: 'Blended' } : blended, 'blended'),
     ];
     buildTable(id + '-table', headers, tableRows);
+
+    if(outlook){
+      const ol = f10PacingOutlook({ monthly, targets, currentMonth, pastMonths: outlook.past,
+        futureMonths: outlook.future, platformMap, byGroup });
+      const olHeaders = [{ label: byGroup ? 'Platform / Group' : 'Platform' }];
+      ol.months.forEach(m => {
+        if(m.kind === 'past') olHeaders.push({ label: `${m.label} actual`, num: true });
+        else if(m.kind === 'current') olHeaders.push({ label: `${m.label} MTD`, num: true }, { label: `${m.label} budget`, num: true });
+        else olHeaders.push({ label: `${m.label} budget`, num: true });
+      });
+      const olCells = c => ol.months.flatMap(m => {
+        const v = c[m.key] || { actual: 0, budget: 0 };
+        if(m.kind === 'past') return [fmtAUDFull(v.actual)];
+        if(m.kind === 'current') return [fmtAUDFull(v.actual), fmtAUDFull(v.budget)];
+        return [fmtAUDFull(v.budget)];
+      });
+      const olLabel = r => !byGroup ? r.label
+        : (r.kind === 'group' ? `<span style="padding-left:16px">${r.label}</span>` : `<strong>${prettyPlat(r.label)}</strong>`);
+      buildTable(id + '-outlook-table', olHeaders, [
+        ...ol.rows.map(r => [olLabel(r), ...olCells(r.cells)]),
+        ['<strong>Total</strong>', ...olCells(ol.total)],
+      ], { sortable: false });
+      f10OutlookChart(id + '-chart-outlook', ol.months, ol.total);
+    }
 
     f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);
     if(!spendOnly) f10PacingChart(id + '-chart-rev', dim, elapsed, daily, 'revenue', blended.t_rev);
