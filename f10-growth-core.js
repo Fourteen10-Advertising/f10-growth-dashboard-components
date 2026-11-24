@@ -330,8 +330,10 @@ function f10ToggleChart(canvasId, togglesId, labels, series, opts = {}){
 //   revenueNote,                              // optional caveat appended to the info box
 //   spendOnly,                                // hide revenue KPI/ROAS + revenue columns + revenue chart
 //   hideInfoBox,                              // hide the explanatory info box (prorate note + revenueNote)
-//   outlook,                                  // true or { pastMonths, futureMonths }: adds a spend-by-month
-//                                             // table + chart (past actuals, this month, future budgets)
+//   outlook,                                  // true or { pastMonths, futureMonths, pastWeeks, futureWeeks, runRateDays }:
+//                                             // adds a spend-by-month table + chart (past actuals, this month,
+//                                             // future budgets) and a spend-by-week table (past weeks actual,
+//                                             // this week and future weeks projected at the recent run rate)
 // }
 const F10_PACE_BEHIND = 0.9, F10_PACE_AHEAD = 1.1;
 
@@ -472,6 +474,87 @@ function f10OutlookChart(canvasId, months, total){
   });
 }
 
+// ── Spend by week (part of f10PacingTab cfg.outlook) ──
+// Day keys are 'YYYY-MM-DD' strings, shifted in UTC so the browser's timezone
+// never moves a day. Weeks start on Monday (same as gGroup's week).
+function f10DayShift(dayKey, k){
+  const d = new Date(Date.UTC(+dayKey.slice(0, 4), +dayKey.slice(5, 7) - 1, +dayKey.slice(8, 10) + k));
+  return d.toISOString().slice(0, 10);
+}
+function f10WeekStart(dayKey){
+  const dow = new Date(dayKey + 'T00:00:00Z').getUTCDay();               // 0 = Sunday
+  return f10DayShift(dayKey, -((dow + 6) % 7));
+}
+function f10WeekLabel(weekKey){
+  return 'w/c ' + new Date(weekKey + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+// Pure: builds the weekly grid from daily actuals. No DOM.
+//   daily:  [{ channel, grp, date:'YYYY-MM-DD', spend }]  (actuals, mart channel values)
+//   latest: the latest date with data ('YYYY-MM-DD')
+// The current week is the Monday-start week holding the first day without data
+// (latest + 1), so after a Sunday load the whole new week is projected.
+// Past weeks are actual spend. The current week is its actual days plus the rest
+// of the week at the run rate; future weeks are 7 days at the run rate. The run
+// rate is each row's average daily spend over the last runRateDays days of data,
+// so it moves with every data refresh.
+// Returns { weeks:[{key,label,kind,actualDays,projectedDays}], rows:[{label,kind,cells,rate}], total, rateFrom, rateTo }
+// where cells[weekKey] = spend (actual, or actual + projected). Rows nest like f10PacingOutlook.
+function f10PacingWeekly({ daily, latest, pastWeeks, futureWeeks, runRateDays, platformMap, byGroup }){
+  const current = f10WeekStart(f10DayShift(latest, 1));
+  const weeks = [];
+  for(let k = -pastWeeks; k <= futureWeeks; k++){
+    const key = f10DayShift(current, 7 * k);
+    const kind = k < 0 ? 'past' : (k === 0 ? 'current' : 'future');
+    const actualDays = kind === 'past' ? 7 : (kind === 'current' ? Math.max(0, Math.round((Date.parse(latest) - Date.parse(current)) / 864e5) + 1) : 0);
+    weeks.push({ key, label: f10WeekLabel(key), kind, actualDays, projectedDays: 7 - actualDays });
+  }
+  const rateFrom = f10DayShift(latest, -(runRateDays - 1)), rateTo = latest;
+  const firstDay = weeks[0].key;
+  const keyOf = (ch, grp) => byGroup ? ch + '||' + (grp == null ? '' : grp) : ch;
+  const mapped = new Set(Object.values(platformMap));
+  const acc = {};                                   // key -> { weeks:{weekKey:actual}, rateSum }
+  daily.forEach(r => {
+    const d = String(r.date).slice(0, 10);
+    if(!mapped.has(r.channel) || d > latest) return;
+    const a = acc[keyOf(r.channel, r.grp)] = acc[keyOf(r.channel, r.grp)] || { weeks: {}, rateSum: 0 };
+    if(d >= rateFrom) a.rateSum += n(r.spend);
+    if(d >= firstDay){ const w = f10WeekStart(d); a.weeks[w] = (a.weeks[w] || 0) + n(r.spend); }
+  });
+
+  const cellsOf = a => {
+    const rate = a.rateSum / runRateDays, out = {};
+    weeks.forEach(w => { out[w.key] = (a.weeks[w.key] || 0) + rate * w.projectedDays; });
+    return { cells: out, rate };
+  };
+  const hasValue = c => Object.values(c.cells).some(v => v) || c.rate;
+  const sumCells = list => {
+    const out = {}; let rate = 0;
+    weeks.forEach(w => { out[w.key] = 0; });
+    list.forEach(c => { rate += c.rate; weeks.forEach(w => { out[w.key] += c.cells[w.key]; }); });
+    return { cells: out, rate };
+  };
+
+  const rows = [], leaves = [];
+  Object.values(platformMap).forEach(ch => {
+    if(byGroup){
+      const grps = Object.keys(acc).filter(k => k.slice(0, k.indexOf('||')) === ch)
+        .map(k => k.slice(k.indexOf('||') + 2)).sort()
+        .filter(g => hasValue(cellsOf(acc[ch + '||' + g])));
+      if(!grps.length) return;
+      const groupCells = grps.map(g => cellsOf(acc[ch + '||' + g]));
+      rows.push({ label: ch, kind: 'subtotal', ...sumCells(groupCells) });
+      grps.forEach((g, i) => { rows.push({ label: g || '(none)', kind: 'group', ...groupCells[i] }); leaves.push(groupCells[i]); });
+    } else if(acc[ch] && hasValue(cellsOf(acc[ch]))){
+      const c = cellsOf(acc[ch]);
+      rows.push({ label: ch, kind: 'group', ...c });
+      leaves.push(c);
+    }
+  });
+  const total = sumCells(leaves);
+  return { weeks, rows, total: total.cells, totalRate: total.rate, rateFrom, rateTo };
+}
+
 function f10PacingTab(cfg){
   const id = cfg.id || 'pacing';
   const platformMap = cfg.platformMap || { gads: 'Google Ads', meta: 'Meta', linkedin: 'LinkedIn' };
@@ -493,9 +576,15 @@ function f10PacingTab(cfg){
   // revenue chart (for lead-gen clients with no tracked revenue).
   const spendOnly = !!cfg.spendOnly;
   // outlook: spend by month around this month. true = 2 months back, 2 ahead.
+  // It also adds spend by week: pastWeeks actual, this week and futureWeeks projected
+  // at the average daily spend of the last runRateDays days (defaults 2, 2, 3).
+  const olCfg = cfg.outlook === true ? {} : (cfg.outlook || {});
   const outlook = cfg.outlook ? {
-    past: Math.max(0, Math.floor(n((cfg.outlook === true ? {} : cfg.outlook).pastMonths ?? 2))),
-    future: Math.max(0, Math.floor(n((cfg.outlook === true ? {} : cfg.outlook).futureMonths ?? 2))),
+    past: Math.max(0, Math.floor(n(olCfg.pastMonths ?? 2))),
+    future: Math.max(0, Math.floor(n(olCfg.futureMonths ?? 2))),
+    pastWeeks: Math.max(0, Math.floor(n(olCfg.pastWeeks ?? 2))),
+    futureWeeks: Math.max(0, Math.floor(n(olCfg.futureWeeks ?? 2))),
+    runRateDays: Math.max(1, Math.floor(n(olCfg.runRateDays ?? 3))),
   } : null;
 
   async function load(){
@@ -537,8 +626,23 @@ function f10PacingTab(cfg){
         AND ${dateField} <= (SELECT d FROM latest)
       GROUP BY channel, grp, month` : null;
 
-    const [targets, actuals, monthly] = await Promise.all([
+    // Daily spend from the earliest past week (or the run-rate window, if earlier).
+    const weeklySQL = outlook ? `
+      WITH latest AS (SELECT MAX(${dateField}) AS d FROM \`${a.table}\`)
+      SELECT ${channelField} AS channel,
+             ${byGroup ? groupField : 'CAST(NULL AS STRING)'} AS grp,
+             FORMAT_DATE('%Y-%m-%d', ${dateField}) AS date,
+             ROUND(SUM(${spendCol}), 2) AS spend
+      FROM \`${a.table}\`
+      WHERE ${dateField} >= LEAST(
+              DATE_SUB(DATE_TRUNC(DATE_ADD((SELECT d FROM latest), INTERVAL 1 DAY), WEEK(MONDAY)), INTERVAL ${7 * outlook.pastWeeks} DAY),
+              DATE_SUB((SELECT d FROM latest), INTERVAL ${outlook.runRateDays - 1} DAY))
+        AND ${dateField} <= (SELECT d FROM latest)
+      GROUP BY channel, grp, date` : null;
+
+    const [targets, actuals, monthly, dailyAll] = await Promise.all([
       runQuery(targetsSQL), runQuery(actualsSQL), monthlySQL ? runQuery(monthlySQL) : Promise.resolve([]),
+      weeklySQL ? runQuery(weeklySQL) : Promise.resolve([]),
     ]);
     if(!actuals.length){ host.innerHTML = '<div class="info-box">No performance data available.</div>'; return; }
 
@@ -639,6 +743,7 @@ function f10PacingTab(cfg){
       <div class="kpi-grid">${kpis}</div>
       <div class="table-card"><div class="table-card-header">${tableTitle}</div><div class="table-wrap" id="${id}-table"></div></div>
       ${outlook ? `<div class="table-card"><div class="table-card-header">Spend by month: actuals, this month and upcoming budgets</div><div class="table-wrap" id="${id}-outlook-table"></div></div>
+      ${outlook.pastWeeks + outlook.futureWeeks ? `<div class="table-card"><div class="table-card-header" id="${id}-weekly-title">Spend by week</div><div class="table-wrap" id="${id}-weekly-table"></div></div>` : ''}
       <div class="chart-card"><div class="chart-card-title">Spend by month: actual vs budget</div><div class="chart-wrap"><canvas id="${id}-chart-outlook"></canvas></div></div>` : ''}
       <div class="chart-card"><div class="chart-card-title">Spend — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-spend"></canvas></div></div>
       ${spendOnly ? '' : `<div class="chart-card"><div class="chart-card-title">Revenue — MTD cumulative vs target pace</div><div class="chart-wrap"><canvas id="${id}-chart-rev"></canvas></div></div>`}`;
@@ -689,6 +794,23 @@ function f10PacingTab(cfg){
         ['<strong>Total</strong>', ...olCells(ol.total)],
       ], { sortable: false });
       f10OutlookChart(id + '-chart-outlook', ol.months, ol.total);
+
+      if(outlook.pastWeeks + outlook.futureWeeks){
+        const wk = f10PacingWeekly({ daily: dailyAll, latest, pastWeeks: outlook.pastWeeks, futureWeeks: outlook.futureWeeks,
+          runRateDays: outlook.runRateDays, platformMap, byGroup });
+        const dayLabel = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+        const wkHeaders = [{ label: byGroup ? 'Platform / Group' : 'Platform' },
+          ...wk.weeks.map(w => ({ num: true, label: `${w.label} ${w.kind === 'past' ? 'actual' : 'projected'}` })),
+          { label: 'Daily run rate', num: true }];
+        const cur = wk.weeks.find(w => w.kind === 'current');
+        const title = document.getElementById(id + '-weekly-title');
+        if(title) title.textContent = `Spend by week: actuals, then projected at the average daily spend of ${dayLabel(wk.rateFrom)} to ${dayLabel(wk.rateTo)}`
+          + (cur ? ` (this week: ${cur.actualDays} of 7 days actual)` : '');
+        buildTable(id + '-weekly-table', wkHeaders, [
+          ...wk.rows.map(r => [olLabel(r), ...wk.weeks.map(w => fmtAUDFull(r.cells[w.key])), fmtAUDFull(r.rate)]),
+          ['<strong>Total</strong>', ...wk.weeks.map(w => fmtAUDFull(wk.total[w.key])), fmtAUDFull(wk.totalRate)],
+        ], { sortable: false });
+      }
     }
 
     f10PacingChart(id + '-chart-spend', dim, elapsed, daily, 'spend', blended.t_spend);
